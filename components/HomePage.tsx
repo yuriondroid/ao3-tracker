@@ -71,56 +71,49 @@ const HomePage: React.FC = () => {
         return;
       }
 
-      // For now, we'll use the works from the onboarding response
-      // In a real app, this would come from the database
       const userId = sessionData.user.id;
       
-      // Calculate stats from the user's works
-      // This is a placeholder - in a real app, you'd fetch from database
-      const mockWorks: Work[] = [
-        {
-          id: '1',
-          title: 'Sample Work 1',
-          author: 'Sample Author',
-          fandom: 'Sample Fandom',
-          status: 'reading',
-          progress: 65,
-          chapters: '12/20',
-          wordCount: 50000,
-          kudos: 150,
-          hits: 1200,
-          bookmarks: 25,
-          comments: 10
-        },
-        {
-          id: '2',
-          title: 'Sample Work 2',
-          author: 'Another Author',
-          fandom: 'Another Fandom',
-          status: 'completed',
-          progress: 100,
-          chapters: '15/15',
-          wordCount: 75000,
-          kudos: 300,
-          hits: 2500,
-          bookmarks: 50,
-          comments: 20
-        }
-      ];
+      // Fetch real data from the database
+      const libraryResponse = await fetch('/api/library');
+      const libraryData = await libraryResponse.json();
+      
+      if (!libraryData.library) {
+        console.log('No library data found');
+        return;
+      }
 
+      // Convert database format to Work interface
+      const realWorks: Work[] = libraryData.library.map((entry: any) => ({
+        id: entry.fanwork_id,
+        title: entry.fanworks?.title || 'Unknown Title',
+        author: entry.fanworks?.author || 'Unknown Author',
+        fandom: entry.fanworks?.fandom || 'Unknown Fandom',
+        status: entry.reading_status || 'to-read',
+        progress: entry.progress_percentage || 0,
+        chapters: `${entry.current_chapter || 1}/${entry.fanworks?.chapters_total || '?'}`,
+        wordCount: entry.fanworks?.word_count || 0,
+        kudos: entry.fanworks?.kudos || 0,
+        hits: entry.fanworks?.hits || 0,
+        bookmarks: entry.fanworks?.bookmarks || 0,
+        comments: entry.fanworks?.comments || 0,
+        publishedDate: entry.fanworks?.published_date ? new Date(entry.fanworks.published_date) : undefined,
+        updatedDate: entry.fanworks?.updated_date ? new Date(entry.fanworks.updated_date) : undefined
+      }));
+
+      // Calculate real stats from the database
       const calculatedStats: Stats = {
-        totalFics: mockWorks.length,
-        wordsRead: mockWorks.reduce((sum, work) => sum + (work.wordCount || 0), 0),
-        currentlyReading: mockWorks.filter(w => w.status === 'reading').length,
-        favorites: mockWorks.filter(w => w.status === 'bookmarked').length,
-        completed: mockWorks.filter(w => w.status === 'completed').length,
-        totalKudos: mockWorks.reduce((sum, work) => sum + (work.kudos || 0), 0),
-        totalHits: mockWorks.reduce((sum, work) => sum + (work.hits || 0), 0)
+        totalFics: realWorks.length,
+        wordsRead: realWorks.reduce((sum, work) => sum + (work.wordCount || 0), 0),
+        currentlyReading: realWorks.filter(w => w.status === 'currently-reading').length,
+        favorites: realWorks.filter(w => w.status === 'bookmarked').length,
+        completed: realWorks.filter(w => w.status === 'completed').length,
+        totalKudos: realWorks.reduce((sum, work) => sum + (work.kudos || 0), 0),
+        totalHits: realWorks.reduce((sum, work) => sum + (work.hits || 0), 0)
       };
 
       setStats(calculatedStats);
-      setCurrentlyReading(mockWorks.filter(w => w.status === 'reading').slice(0, 3));
-      setRecentActivity(mockWorks.slice(0, 5));
+      setCurrentlyReading(realWorks.filter(w => w.status === 'currently-reading').slice(0, 3));
+      setRecentActivity(realWorks.slice(0, 5));
       
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);

@@ -47,24 +47,49 @@ const ProfilePage: React.FC = () => {
   const [isPublicProfile, setIsPublicProfile] = useState(true);
   const [friendSearchTerm, setFriendSearchTerm] = useState('');
 
-  // Mock user data
-  const currentUser = {
-    id: '1',
-    username: 'FicLover2024',
-    ao3Username: 'FicLover',
-    email: 'user@example.com',
+  // Real user data - will be fetched from session
+  const [currentUser, setCurrentUser] = useState({
+    id: '',
+    username: '',
+    ao3Username: '',
+    email: '',
     avatar: '',
     bio: 'Avid fanfiction reader with a love for angst, hurt/comfort, and happy endings. Always looking for new fics to add to my ever-growing library!',
-    joinDate: '2024-01-15',
+    joinDate: '',
     ao3Connected: true,
-    totalFicsRead: 89,
-    totalWordsRead: 4200000,
-    averageRating: 4.3,
-    currentStreak: 45,
+    totalFicsRead: 0,
+    totalWordsRead: 0,
+    averageRating: 0,
+    currentStreak: 0,
     favoriteGenres: ['Angst', 'Hurt/Comfort', 'Romance', 'Alternative Universe'],
     favoriteFandoms: ['Harry Potter', 'Marvel', 'Sherlock Holmes'],
     isPublic: isPublicProfile
-  };
+  });
+
+  // Fetch real user data
+  React.useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const sessionResponse = await fetch('/api/session');
+        const sessionData = await sessionResponse.json();
+        
+        if (sessionData.user) {
+          setCurrentUser(prev => ({
+            ...prev,
+            id: sessionData.user.id,
+            username: sessionData.user.displayName || sessionData.user.username,
+            ao3Username: sessionData.user.username,
+            email: sessionData.user.email || '',
+            joinDate: new Date().toISOString().split('T')[0] // Today's date as placeholder
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   // Mock friends data
   const [friends] = useState<Friend[]>([

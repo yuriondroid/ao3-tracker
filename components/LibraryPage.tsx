@@ -54,25 +54,61 @@ const LibraryPage: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Get user data from session
-  React.useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await fetch('/api/session')
-        const data = await response.json()
+  const [fics, setFics] = useState<Fic[]>([]);
+  const [shelves, setShelves] = useState<Shelf[]>([]);
 
-        if (data.authenticated) {
-          setUser(data.user)
+  // Get user data and library from session and database
+  React.useEffect(() => {
+    const fetchLibraryData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get user session
+        const sessionResponse = await fetch('/api/session');
+        const sessionData = await sessionResponse.json();
+
+        if (sessionData.authenticated) {
+          setUser(sessionData.user);
+          
+          // Fetch library data from database
+          const libraryResponse = await fetch('/api/library');
+          const libraryData = await libraryResponse.json();
+          
+          if (libraryData.library) {
+            // Convert database entries to Fic format
+            const realFics: Fic[] = libraryData.library.map((entry: any) => ({
+              id: entry.fanwork_id,
+              title: entry.fanworks?.title || 'Unknown Title',
+              author: entry.fanworks?.author || 'Unknown Author',
+              fandom: entry.fanworks?.fandom || 'Unknown Fandom',
+              relationship: entry.fanworks?.relationship || 'No Relationship',
+              wordCount: entry.fanworks?.word_count || 0,
+              chapters: `${entry.fanworks?.chapters_published || 1}/${entry.fanworks?.chapters_total || '?'}`,
+              status: entry.fanworks?.status || 'Unknown',
+              rating: entry.fanworks?.rating || 'NR',
+              userRating: entry.user_rating || 0,
+              readingStatus: entry.reading_status || 'want-to-read',
+              progress: entry.progress_percentage || 0,
+              dateAdded: entry.date_added ? new Date(entry.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+              lastRead: entry.last_read ? new Date(entry.last_read).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+              shelves: [],
+              tags: entry.fanworks?.additional_tags || [],
+              summary: entry.fanworks?.summary || 'No summary available',
+              url: `https://archiveofourown.org/works/${entry.fanworks?.ao3_work_id || entry.fanwork_id}`
+            }));
+            
+            setFics(realFics);
+          }
         }
       } catch (error) {
-        console.error('Session check error:', error)
+        console.error('Failed to fetch library data:', error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    checkSession()
-  }, [])
+    fetchLibraryData();
+  }, []);
 
   // Convert scraped works to Fic format
   const convertScrapedWorksToFics = (scrapedWorks: any[]): Fic[] => {
@@ -98,20 +134,28 @@ const LibraryPage: React.FC = () => {
     }))
   }
 
-  // Use real data if available, otherwise fallback to mock data
-  const [shelves] = useState<Shelf[]>([
+  // Default shelves
+  const defaultShelves: Shelf[] = [
     { id: '1', name: 'Favorites', color: 'bg-red-100 text-red-800', ficCount: 0 },
     { id: '2', name: 'Currently Reading', color: 'bg-blue-100 text-blue-800', ficCount: 0 },
     { id: '3', name: 'Want to Read', color: 'bg-yellow-100 text-yellow-800', ficCount: 0 },
     { id: '4', name: 'Completed', color: 'bg-green-100 text-green-800', ficCount: 0 },
     { id: '5', name: 'Angst That Destroyed Me', color: 'bg-purple-100 text-purple-800', ficCount: 0 },
     { id: '6', name: 'Comfort Reads', color: 'bg-pink-100 text-pink-800', ficCount: 0 },
-  ]);
+  ];
 
-  const [fics, setFics] = useState<Fic[]>([]);
-
-  // Fetch real data from database
-  const fetchLibraryData = async () => {
+  // Update shelves with real counts
+  React.useEffect(() => {
+    if (fics.length > 0) {
+      const updatedShelves = defaultShelves.map(shelf => ({
+        ...shelf,
+        ficCount: fics.filter(fic => fic.shelves.includes(shelf.id)).length
+      }));
+      setShelves(updatedShelves);
+    } else {
+      setShelves(defaultShelves);
+    }
+  }, [fics]);
     if (!user?.id) return;
 
     const supabase = createClient(
