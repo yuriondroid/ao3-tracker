@@ -4,8 +4,35 @@ import { AO3Scraper } from '@/lib/ao3-scraper'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
+  // Add global error handler
+  const handleError = (error: any, context: string) => {
+    console.error(`Onboarding API: ${context} error:`, error)
+    return NextResponse.json({ 
+      success: false, 
+      error: `${context}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }, { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
   try {
-    const { email, ao3Username, ao3Password, username, displayName, importScope } = await request.json()
+    let requestData
+    try {
+      requestData = await request.json()
+    } catch (parseError) {
+      return handleError(parseError, 'Invalid JSON in request body')
+    }
+    
+    const { email, ao3Username, ao3Password, username, displayName, importScope } = requestData
+
+    // Validate required fields
+    if (!ao3Username || !ao3Password) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'AO3 username and password are required' 
+      }, { status: 400 })
+    }
 
     console.log('Onboarding API: Creating account for:', username)
 
@@ -178,24 +205,6 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Onboarding API: Error:', error)
-    
-    // Ensure we always return valid JSON
-    let errorMessage = 'Unknown error occurred'
-    if (error instanceof Error) {
-      errorMessage = error.message
-    } else if (typeof error === 'string') {
-      errorMessage = error
-    }
-    
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Failed to create account: ' + errorMessage
-    }, { 
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
+    return handleError(error, 'Failed to create account')
   }
 }
