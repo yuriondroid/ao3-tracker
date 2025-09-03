@@ -1,174 +1,270 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { SimpleAuth } from '@/lib/simple-auth'
-import { AO3Scraper } from '@/lib/ao3-scraper'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+import { SimpleAuth } from '@/lib/simple-auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: NextRequest) {
   // Add global error handler
   const handleError = (error: any, context: string) => {
-    console.error(`Onboarding API: ${context} error:`, error)
+    console.error(`Onboarding API: ${context} error:`, error);
     return NextResponse.json({ 
       success: false, 
       error: `${context}: ${error instanceof Error ? error.message : 'Unknown error'}`
     }, { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    })
-  }
+    });
+  };
 
   try {
-    let requestData
+    let requestData;
     try {
-      requestData = await request.json()
+      requestData = await request.json();
     } catch (parseError) {
-      return handleError(parseError, 'Invalid JSON in request body')
+      return handleError(parseError, 'Invalid JSON in request body');
     }
     
-    const { email, ao3Username, ao3Password, username, displayName, importScope } = requestData
+    const { email, username, displayName, importData } = requestData;
 
     // Validate required fields
-    if (!ao3Username || !ao3Password) {
+    if (!email || !username || !displayName) {
       return NextResponse.json({ 
         success: false, 
-        error: 'AO3 username and password are required' 
-      }, { status: 400 })
+        error: 'Email, username, and display name are required' 
+      }, { status: 400 });
     }
 
-    console.log('Onboarding API: Creating account for:', username)
-
-    // Check for required environment variables
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.log('Onboarding API: Missing Supabase environment variables')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Database configuration is missing. Please check environment variables.' 
-      }, { status: 500 })
-    }
+    console.log('Onboarding API: Creating account for:', username);
 
     // Create user in SimpleAuth
-    const user = await SimpleAuth.authenticate(ao3Username, ao3Password)
-    if (!user) {
-      console.log('Onboarding API: SimpleAuth authentication failed')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to create user account' 
-      }, { status: 400 })
-    }
+    const user = {
+      id: uuidv4(),
+      name: displayName,
+      email,
+      ao3Username: username
+    };
 
-    console.log('Onboarding API: User created in SimpleAuth:', ao3Username)
+    // Store user in SimpleAuth (users Map)
+    const users = (SimpleAuth as any).users || new Map();
+    users.set(username, user);
+    console.log('Onboarding API: User created in SimpleAuth:', username);
 
-    // Initialize Supabase client
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
-
-    // Create user in Supabase database
+    // Create user in database
     let { data: dbUser, error: dbError } = await supabase
       .from('users')
       .insert({
-        email: email,
-        ao3_username: ao3Username
+        id: user.id,
+        email,
+        username,
+        display_name: displayName,
+        onboarding_completed: false
       })
       .select()
-      .single()
+      .single();
 
     if (dbError) {
-      if (dbError.message.includes('duplicate key')) {
-        console.log('Onboarding API: User already exists in database, fetching existing user')
-        // User already exists, fetch the existing user
+      // If user already exists, fetch the existing user
+      if (dbError.code === '23505') { // Unique constraint violation
+        console.log('Onboarding API: User already exists in database, fetching existing user');
         const { data: existingUser, error: fetchError } = await supabase
           .from('users')
-          .select('*')
-          .eq('ao3_username', ao3Username)
-          .single()
-        
+          .select()
+          .eq('username', username)
+          .single();
+
         if (fetchError) {
-          console.log('Onboarding API: Failed to fetch existing user:', fetchError)
-          return NextResponse.json({ 
-            success: false, 
-            error: 'Failed to fetch existing user: ' + fetchError.message 
-          }, { status: 500 })
+          return handleError(fetchError, 'Failed to fetch existing user');
         }
-        
-        dbUser = existingUser
+
+        dbUser = existingUser;
       } else {
-        console.log('Onboarding API: Failed to create user in database:', dbError)
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Failed to create user in database: ' + dbError.message 
-        }, { status: 500 })
+        return handleError(dbError, 'Failed to create user in database');
       }
     }
 
-    if (!dbUser) {
-      console.log('Onboarding API: No user data available')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to create or fetch user in database' 
-      }, { status: 500 })
-    }
+    console.log('Onboarding API: User ready in database:', username);
 
-    console.log('Onboarding API: User ready in database:', ao3Username)
-
-    // Get user's actual reading history from AO3
-    console.log('Onboarding API: Getting user history from AO3')
-    const scraper = new AO3Scraper()
-    const userWorks = await scraper.getUserHistory(ao3Username, ao3Password, importScope)
-
-    if (userWorks.length === 0) {
-      console.log('Onboarding API: No works found in user history')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'No reading history found. Please check your AO3 credentials.' 
-      }, { status: 400 })
-    }
-
-    console.log('Onboarding API: Successfully scraped', userWorks.length, 'works from user history')
-
-    // Save works to database
-    console.log('Onboarding API: Saving works to database...')
-    let savedCount = 0
+    // Process and combine all imported works
+    const allWorks = [];
     
+    // Add bookmarks (set status based on source)
+    if (importData?.bookmarks) {
+      allWorks.push(...importData.bookmarks.map((work: any) => ({
+        id: work.id,
+        user_id: dbUser.id,
+        title: work.title,
+        author: work.author,
+        author_url: work.author_url,
+        url: work.url,
+        fandoms: work.fandoms,
+        rating: work.rating,
+        warnings: work.warnings,
+        categories: work.categories,
+        relationships: work.relationships,
+        characters: work.characters,
+        additional_tags: work.tags,
+        words: work.words,
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
+        kudos: work.kudos,
+        hits: work.hits,
+        bookmarks: work.bookmarks,
+        comments: 0,
+        summary: work.summary,
+        published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
+        updated_date: new Date(),
+        status: 'want-to-read', // Bookmarked works are usually "want to read"
+        date_added: new Date().toISOString(),
+        source: 'bookmarks'
+      })));
+    }
+
+    // Add history works (set as completed)
+    if (importData?.history) {
+      allWorks.push(...importData.history.map((work: any) => ({
+        id: work.id,
+        user_id: dbUser.id,
+        title: work.title,
+        author: work.author,
+        author_url: work.author_url,
+        url: work.url,
+        fandoms: work.fandoms,
+        rating: work.rating,
+        warnings: work.warnings,
+        categories: work.categories,
+        relationships: work.relationships,
+        characters: work.characters,
+        additional_tags: work.tags,
+        words: work.words,
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
+        kudos: work.kudos,
+        hits: work.hits,
+        bookmarks: work.bookmarks,
+        comments: 0,
+        summary: work.summary,
+        published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
+        updated_date: new Date(),
+        status: 'completed', // History implies they were read
+        date_completed: work.date_visited || new Date().toISOString(),
+        date_added: new Date().toISOString(),
+        source: 'history',
+        visit_count: work.visit_count || 1
+      })));
+    }
+
+    // Add marked for later works
+    if (importData?.markedForLater) {
+      allWorks.push(...importData.markedForLater.map((work: any) => ({
+        id: work.id,
+        user_id: dbUser.id,
+        title: work.title,
+        author: work.author,
+        author_url: work.author_url,
+        url: work.url,
+        fandoms: work.fandoms,
+        rating: work.rating,
+        warnings: work.warnings,
+        categories: work.categories,
+        relationships: work.relationships,
+        characters: work.characters,
+        additional_tags: work.tags,
+        words: work.words,
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
+        kudos: work.kudos,
+        hits: work.hits,
+        bookmarks: work.bookmarks,
+        comments: 0,
+        summary: work.summary,
+        published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
+        updated_date: new Date(),
+        status: 'to-read', // Marked for later is "to read"
+        date_added: new Date().toISOString(),
+        source: 'marked-for-later'
+      })));
+    }
+
+    // Remove duplicates based on work ID
+    const uniqueWorks = allWorks.reduce((acc: any[], current: any) => {
+      const existing = acc.find((work: any) => work.id === current.id);
+      if (!existing) {
+        acc.push(current);
+      } else {
+        // If duplicate, prefer the one with more complete data or higher priority status
+        const statusPriority: Record<string, number> = { 'completed': 3, 'reading': 2, 'want-to-read': 1, 'to-read': 0 };
+        if (statusPriority[current.status] > statusPriority[existing.status]) {
+          const index = acc.indexOf(existing);
+          acc[index] = current;
+        }
+      }
+      return acc;
+    }, [] as any[]);
+
+    console.log('Onboarding API: Processing', uniqueWorks.length, 'unique works');
+
     // Double-check that dbUser exists and has an id
     if (!dbUser || !dbUser.id) {
-      console.log('Onboarding API: dbUser is null or missing id, cannot save works')
+      console.log('Onboarding API: dbUser is null or missing id, cannot save works');
       return NextResponse.json({ 
         success: false, 
         error: 'Database user not properly created. Please try again.' 
-      }, { status: 500 })
+      }, { status: 500 });
     }
-    
-    for (const work of userWorks) {
-      try {
-        await scraper.saveWorkToDatabase(work, dbUser.id)
-        savedCount++
-      } catch (error) {
-        console.log('Onboarding API: Failed to save work:', work.title, error)
+
+    // Insert works in batches to avoid overwhelming the database
+    const batchSize = 50;
+    let processedCount = 0;
+
+    for (let i = 0; i < uniqueWorks.length; i += batchSize) {
+      const batch = uniqueWorks.slice(i, i + batchSize);
+      
+      const { error: insertError } = await supabase
+        .from('works')
+        .upsert(batch, { onConflict: 'id,user_id' });
+
+      if (insertError) {
+        console.error(`Onboarding API: Failed to insert batch ${i / batchSize + 1}:`, insertError);
+        // Continue with other batches even if one fails
+      } else {
+        processedCount += batch.length;
       }
     }
 
-    console.log('Onboarding API: Saved', savedCount, 'works to database')
+    console.log('Onboarding API: Saved', processedCount, 'works to database');
 
     // Create default shelves for the user
     try {
-      await scraper.createDefaultShelvesForUser(dbUser.id)
+      await supabase.rpc('create_default_shelves_for_user', { user_uuid: dbUser.id });
+      console.log('Onboarding API: Created default shelves for user');
     } catch (error) {
-      console.log('Onboarding API: Failed to create default shelves:', error)
+      console.log('Onboarding API: Failed to create default shelves:', error);
       // Continue anyway, shelves are not critical
     }
 
     // Create new session for the user
-    let sessionId
+    let sessionId;
     try {
-      sessionId = SimpleAuth.createSession(user)
-      console.log('Onboarding API: Session created:', sessionId)
+      sessionId = SimpleAuth.createSession(user);
+      console.log('Onboarding API: Session created:', sessionId);
     } catch (error) {
-      console.log('Onboarding API: Failed to create session:', error)
-      sessionId = `session_${ao3Username}_${Date.now()}`
+      console.log('Onboarding API: Failed to create session:', error);
+      sessionId = `session_${username}_${Date.now()}`;
     }
 
-    console.log('Onboarding API: Account created successfully for:', ao3Username)
+    // Mark user onboarding as completed
+    await supabase
+      .from('users')
+      .update({ onboarding_completed: true })
+      .eq('id', dbUser.id);
+
+    console.log('Onboarding API: Account created successfully for:', username);
 
     // Create response with session cookie
     try {
@@ -176,16 +272,16 @@ export async function POST(request: NextRequest) {
         success: true,
         user: {
           id: dbUser.id,
-          username: ao3Username,
-          displayName: displayName || ao3Username,
+          username: username,
+          displayName: displayName,
           email: email,
           onboardingCompleted: true
         },
         sessionId: sessionId,
-        worksImported: userWorks.length,
-        worksSaved: savedCount,
-        works: userWorks
-      })
+        worksImported: uniqueWorks.length,
+        worksSaved: processedCount,
+        message: `Successfully imported ${processedCount} unique works from your AO3 data!`
+      });
 
       // Set session cookie
       response.cookies.set('sessionId', sessionId, {
@@ -193,18 +289,18 @@ export async function POST(request: NextRequest) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7 // 7 days
-      })
+      });
 
-      return response
+      return response;
     } catch (error) {
-      console.log('Onboarding API: Failed to create response:', error)
+      console.log('Onboarding API: Failed to create response:', error);
       return NextResponse.json({ 
         success: false, 
         error: 'Failed to create response: ' + (error instanceof Error ? error.message : 'Unknown error')
-      }, { status: 500 })
+      }, { status: 500 });
     }
 
   } catch (error) {
-    return handleError(error, 'Failed to create account')
+    return handleError(error, 'Failed to create account');
   }
 }

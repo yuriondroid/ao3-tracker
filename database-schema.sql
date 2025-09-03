@@ -1,172 +1,160 @@
--- FicTracker Database Schema for Supabase
--- Run this in your Supabase SQL editor
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- AO3 Tracker Database Schema
+-- Updated for multi-file import system
 
 -- Users table
-CREATE TABLE users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
-  ao3_username TEXT UNIQUE,
-  ao3_session_token TEXT, -- For accessing private works
+  username TEXT UNIQUE NOT NULL,
+  display_name TEXT NOT NULL,
+  onboarding_completed BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- User preferences
-CREATE TABLE user_preferences (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+-- User preferences table
+CREATE TABLE IF NOT EXISTS user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  blocked_fandoms TEXT[] DEFAULT '{}',
-  blocked_tags TEXT[] DEFAULT '{}',
-  blocked_ratings TEXT[] DEFAULT '{}',
-  blocked_warnings TEXT[] DEFAULT '{}',
-  preferred_ratings TEXT[] DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT NOW()
+  theme TEXT DEFAULT 'light',
+  notifications_enabled BOOLEAN DEFAULT true,
+  auto_sync BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Fanworks table
-CREATE TABLE fanworks (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  ao3_work_id TEXT UNIQUE NOT NULL,
+-- Fanworks table (main works table)
+CREATE TABLE IF NOT EXISTS works (
+  id TEXT PRIMARY KEY, -- AO3 work ID
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  author TEXT NOT NULL,
-  fandom TEXT NOT NULL,
-  relationship TEXT,
+  author TEXT,
+  author_url TEXT,
+  fandom TEXT[],
+  relationship TEXT[],
+  characters TEXT[],
   additional_tags TEXT[],
   rating TEXT,
   warnings TEXT[],
-  category TEXT,
-  status TEXT,
-  chapters_published INTEGER,
+  categories TEXT[],
+  chapters_current INTEGER,
   chapters_total INTEGER,
-  word_count INTEGER,
-  language TEXT DEFAULT 'English',
-  published_date TIMESTAMP,
-  updated_date TIMESTAMP,
+  words INTEGER,
+  kudos INTEGER,
+  hits INTEGER,
+  bookmarks INTEGER,
+  comments INTEGER,
+  published_date DATE,
+  updated_date DATE,
   summary TEXT,
-  kudos INTEGER DEFAULT 0,
-  comments INTEGER DEFAULT 0,
-  bookmarks INTEGER DEFAULT 0,
-  hits INTEGER DEFAULT 0,
-  last_scraped TIMESTAMP DEFAULT NOW()
-);
-
--- User library entries
-CREATE TABLE user_library (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  fanwork_id UUID REFERENCES fanworks(id) ON DELETE CASCADE,
-  reading_status TEXT CHECK (reading_status IN ('want-to-read', 'currently-reading', 'completed', 'dropped')),
-  user_rating INTEGER CHECK (user_rating >= 1 AND user_rating <= 5),
-  progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
-  current_chapter INTEGER DEFAULT 1,
+  url TEXT,
+  status TEXT DEFAULT 'to-read', -- 'reading', 'completed', 'dropped', 'to-read', 'want-to-read'
+  progress INTEGER DEFAULT 0, -- percentage read
+  user_rating INTEGER, -- 1-5 stars
+  user_notes TEXT,
+  shelf_id TEXT,
   date_added TIMESTAMP DEFAULT NOW(),
   date_started TIMESTAMP,
   date_completed TIMESTAMP,
-  last_read TIMESTAMP,
-  private_notes TEXT,
-  UNIQUE(user_id, fanwork_id)
+  source TEXT, -- 'bookmarks', 'history', 'marked-for-later'
+  visit_count INTEGER DEFAULT 1,
+  date_visited TIMESTAMP,
+  date_bookmarked TIMESTAMP,
+  date_marked TIMESTAMP
 );
 
--- User shelves
-CREATE TABLE user_shelves (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+-- Shelves table for custom organization
+CREATE TABLE IF NOT EXISTS shelves (
+  id TEXT PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
-  color TEXT DEFAULT '#6366f1',
-  is_public BOOLEAN DEFAULT false,
+  is_default BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Shelf items
-CREATE TABLE shelf_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  shelf_id UUID REFERENCES user_shelves(id) ON DELETE CASCADE,
-  library_entry_id UUID REFERENCES user_library(id) ON DELETE CASCADE,
-  added_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(shelf_id, library_entry_id)
-);
-
--- Reading sessions for tracking
-CREATE TABLE reading_sessions (
+-- Reading sessions for tracking progress
+CREATE TABLE IF NOT EXISTS reading_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  library_entry_id UUID REFERENCES user_library(id) ON DELETE CASCADE,
-  session_start TIMESTAMP DEFAULT NOW(),
-  session_end TIMESTAMP,
-  chapters_read INTEGER DEFAULT 0,
-  words_read INTEGER DEFAULT 0
+  work_id TEXT REFERENCES works(id) ON DELETE CASCADE,
+  session_date DATE DEFAULT CURRENT_DATE,
+  words_read INTEGER,
+  time_spent INTEGER, -- minutes
+  progress_before INTEGER,
+  progress_after INTEGER
 );
 
--- Create indexes for better performance
-CREATE INDEX idx_users_ao3_username ON users(ao3_username);
-CREATE INDEX idx_fanworks_ao3_work_id ON fanworks(ao3_work_id);
-CREATE INDEX idx_user_library_user_id ON user_library(user_id);
-CREATE INDEX idx_user_library_reading_status ON user_library(reading_status);
-CREATE INDEX idx_user_shelves_user_id ON user_shelves(user_id);
-CREATE INDEX idx_reading_sessions_user_id ON reading_sessions(user_id);
+-- Import jobs for tracking import progress
+CREATE TABLE IF NOT EXISTS import_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'importing_works', 'completed', 'failed'
+  total_works INTEGER DEFAULT 0,
+  processed_works INTEGER DEFAULT 0,
+  progress_percentage INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  error_message TEXT
+);
 
--- Enable Row Level Security (RLS)
+-- Create default shelves for new users
+CREATE OR REPLACE FUNCTION create_default_shelves_for_user(user_uuid UUID) RETURNS void AS $$
+BEGIN
+  INSERT INTO shelves (id, user_id, name, is_default) VALUES 
+    (gen_random_uuid()::text, user_uuid, 'Currently Reading', true),
+    (gen_random_uuid()::text, user_uuid, 'Want to Read', true),
+    (gen_random_uuid()::text, user_uuid, 'Completed', true),
+    (gen_random_uuid()::text, user_uuid, 'Favorites', true),
+    (gen_random_uuid()::text, user_uuid, 'Dropped', true);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Row Level Security (RLS) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fanworks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_library ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_shelves ENABLE ROW LEVEL SECURITY;
-ALTER TABLE shelf_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE works ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shelves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE import_jobs ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
--- Users can only see their own data
-CREATE POLICY "Users can view own data" ON users FOR SELECT USING (auth.uid()::text = id::text);
-CREATE POLICY "Users can update own data" ON users FOR UPDATE USING (auth.uid()::text = id::text);
+-- Users can only access their own data
+CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid()::text = id::text);
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid()::text = id::text);
 
--- User preferences policies
 CREATE POLICY "Users can view own preferences" ON user_preferences FOR SELECT USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can update own preferences" ON user_preferences FOR UPDATE USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can insert own preferences" ON user_preferences FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
 
--- Fanworks are readable by all authenticated users
-CREATE POLICY "Authenticated users can view fanworks" ON fanworks FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Service role can manage fanworks" ON fanworks FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Users can view own works" ON works FOR SELECT USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can insert own works" ON works FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can update own works" ON works FOR UPDATE USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can delete own works" ON works FOR DELETE USING (auth.uid()::text = user_id::text);
 
--- User library policies
-CREATE POLICY "Users can view own library" ON user_library FOR SELECT USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can update own library" ON user_library FOR UPDATE USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can insert own library entries" ON user_library FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can delete own library entries" ON user_library FOR DELETE USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can view own shelves" ON shelves FOR SELECT USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can insert own shelves" ON shelves FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can update own shelves" ON shelves FOR UPDATE USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can delete own shelves" ON shelves FOR DELETE USING (auth.uid()::text = user_id::text);
 
--- User shelves policies
-CREATE POLICY "Users can view own shelves" ON user_shelves FOR SELECT USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can update own shelves" ON user_shelves FOR UPDATE USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can insert own shelves" ON user_shelves FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can delete own shelves" ON user_shelves FOR DELETE USING (auth.uid()::text = user_id::text);
-
--- Shelf items policies
-CREATE POLICY "Users can view own shelf items" ON shelf_items FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM user_shelves 
-    WHERE user_shelves.id = shelf_items.shelf_id 
-    AND user_shelves.user_id::text = auth.uid()::text
-  )
-);
-CREATE POLICY "Users can manage own shelf items" ON shelf_items FOR ALL USING (
-  EXISTS (
-    SELECT 1 FROM user_shelves 
-    WHERE user_shelves.id = shelf_items.shelf_id 
-    AND user_shelves.user_id::text = auth.uid()::text
-  )
-);
-
--- Reading sessions policies
 CREATE POLICY "Users can view own reading sessions" ON reading_sessions FOR SELECT USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can update own reading sessions" ON reading_sessions FOR UPDATE USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can insert own reading sessions" ON reading_sessions FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can update own reading sessions" ON reading_sessions FOR UPDATE USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can delete own reading sessions" ON reading_sessions FOR DELETE USING (auth.uid()::text = user_id::text);
 
--- Create function to update updated_at timestamp
+CREATE POLICY "Users can view own import jobs" ON import_jobs FOR SELECT USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can insert own import jobs" ON import_jobs FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can update own import jobs" ON import_jobs FOR UPDATE USING (auth.uid()::text = user_id::text);
+
+-- Indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_works_user_id ON works(user_id);
+CREATE INDEX IF NOT EXISTS idx_works_status ON works(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_works_source ON works(user_id, source);
+CREATE INDEX IF NOT EXISTS idx_works_date_added ON works(user_id, date_added DESC);
+CREATE INDEX IF NOT EXISTS idx_shelves_user_id ON shelves(user_id);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_id ON reading_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_work_id ON reading_sessions(work_id);
+CREATE INDEX IF NOT EXISTS idx_import_jobs_user_id ON import_jobs(user_id);
+
+-- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -175,6 +163,5 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create trigger for users table
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
