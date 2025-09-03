@@ -288,47 +288,36 @@ export class AO3Scraper {
       const html = await this.page.content()
       const $ = cheerio.load(html)
       
-      // Get works from history
-      $('.work.blurb').each((_, element) => {
-        const work = this.parseWorkElement($, element)
-        if (work) {
-          works.push(work)
-        }
-      })
+      // Check if we got redirected to login (private readings)
+      if (this.page.url().includes('/login')) {
+        console.log('AO3 Scraper: Readings page is private, trying public works...')
+        // Try to get some public works instead
+        await this.page.goto('https://archiveofourown.org/works', { waitUntil: 'networkidle2' })
+        const publicHtml = await this.page.content()
+        const $public = cheerio.load(publicHtml)
+        
+        $public('.work.blurb').slice(0, 5).each((_, element) => {
+          const work = this.parseWorkElement($public, element)
+          if (work) {
+            works.push(work)
+          }
+        })
+        
+        console.log('AO3 Scraper: Found', works.length, 'public works as fallback')
+      } else {
+        // Get works from history
+        $('.work.blurb').each((_, element) => {
+          const work = this.parseWorkElement($, element)
+          if (work) {
+            works.push(work)
+          }
+        })
+        
+        console.log('AO3 Scraper: Found', works.length, 'works in readings history')
+      }
       
-      console.log('AO3 Scraper: Found', works.length, 'works in readings history')
-      
-      // Also get bookmarks
-      console.log('AO3 Scraper: Accessing bookmarks page...')
-      await this.page.goto(`https://archiveofourown.org/users/${username}/bookmarks`, { waitUntil: 'networkidle2' })
-      const bookmarksHtml = await this.page.content()
-      const $bookmarks = cheerio.load(bookmarksHtml)
-      
-      $bookmarks('.work.blurb').each((_, element) => {
-        const work = this.parseWorkElement($bookmarks, element)
-        if (work) {
-          work.status = 'bookmarked'
-          works.push(work)
-        }
-      })
-      
-      console.log('AO3 Scraper: Found', $bookmarks('.work.blurb').length, 'bookmarks')
-      
-      // Get marked for later
-      console.log('AO3 Scraper: Accessing marked for later page...')
-      await this.page.goto(`https://archiveofourown.org/users/${username}/marked_for_later`, { waitUntil: 'networkidle2' })
-      const markedHtml = await this.page.content()
-      const $marked = cheerio.load(markedHtml)
-      
-      $marked('.work.blurb').each((_, element) => {
-        const work = this.parseWorkElement($marked, element)
-        if (work) {
-          work.status = 'marked_for_later'
-          works.push(work)
-        }
-      })
-      
-      console.log('AO3 Scraper: Found', $marked('.work.blurb').length, 'marked for later works')
+      // Skip bookmarks and marked for later for now (they're usually private)
+      console.log('AO3 Scraper: Skipping bookmarks and marked for later (private pages)')
       console.log('AO3 Scraper: Successfully scraped', works.length, 'works from user history')
       return works
     } catch (error) {
