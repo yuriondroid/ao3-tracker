@@ -113,6 +113,12 @@ export class AO3Scraper {
       await passwordField.type(password)
       console.log('AO3 Scraper: Filled login form')
       
+      // Debug: Check what's on the page
+      const pageContent = await this.page.content()
+      console.log('AO3 Scraper: Page contains "Log In":', pageContent.includes('Log In'))
+      console.log('AO3 Scraper: Page contains "Login":', pageContent.includes('Login'))
+      console.log('AO3 Scraper: Page contains "Submit":', pageContent.includes('Submit'))
+      
       // Try multiple submission methods
       let submitted = false
       
@@ -123,8 +129,14 @@ export class AO3Scraper {
         '.submit',
         'input[value*="Log"]',
         'input[value*="Sign"]',
+        'input[value="Log In"]',
+        'input[value="Login"]',
         'button:contains("Log")',
-        'button:contains("Sign")'
+        'button:contains("Sign")',
+        'input[value="Submit"]',
+        'button[type="submit"]',
+        '.btn-primary',
+        '.btn-submit'
       ]
       
       for (const selector of submitSelectors) {
@@ -156,7 +168,7 @@ export class AO3Scraper {
       // Method 3: Try submitting the form directly
       if (!submitted) {
         try {
-          await this.page.evaluate(() => {
+          const formSubmitted = await this.page.evaluate(() => {
             const forms = document.querySelectorAll('form')
             for (const form of forms) {
               if (form.querySelector('input[type="password"]')) {
@@ -166,8 +178,10 @@ export class AO3Scraper {
             }
             return false
           })
-          console.log('AO3 Scraper: Submitted form directly')
-          submitted = true
+          if (formSubmitted) {
+            console.log('AO3 Scraper: Submitted form directly')
+            submitted = true
+          }
         } catch (e) {
           console.log('AO3 Scraper: Direct form submission failed')
         }
