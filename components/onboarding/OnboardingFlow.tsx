@@ -17,6 +17,7 @@ interface ParsedData {
 interface FormData {
   email: string;
   username: string;
+  password: string;
   displayName: string;
   importData?: ParsedData;
   totalWorks?: number;
@@ -31,6 +32,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
   const [formData, setFormData] = useState<FormData>({
     email: '',
     username: '',
+    password: '',
     displayName: ''
   });
   const [files, setFiles] = useState<FileUploadState>({
@@ -217,6 +219,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       if (!formData.username) newErrors.username = 'Username is required';
       else if (formData.username.length < 3) newErrors.username = 'Username must be at least 3 characters';
       
+      if (!formData.password) newErrors.password = 'Password is required';
+      else if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+      
       if (!formData.displayName) newErrors.displayName = 'Display name is required';
     }
 
@@ -322,6 +327,25 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                   />
                 </div>
                 {errors.username && <p className="text-red-500 text-sm mt-1">{errors.username}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => updateData('password', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                      errors.password ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Choose a secure password"
+                  />
+                </div>
+                {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
               </div>
 
               <div>

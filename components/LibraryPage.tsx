@@ -21,21 +21,35 @@ interface Fic {
   id: string;
   title: string;
   author: string;
-  fandom: string;
-  relationship: string;
-  wordCount: number;
-  chapters: string;
-  status: 'Complete' | 'In Progress' | 'Abandoned';
-  rating: 'G' | 'T' | 'M' | 'E' | 'NR';
-  userRating: number;
-  readingStatus: 'want-to-read' | 'currently-reading' | 'completed';
-  progress: number;
-  dateAdded: string;
-  lastRead: string;
-  shelves: string[];
-  tags: string[];
+  author_url: string;
+  fandoms: string[];
+  relationships: string[];
+  characters: string[];
+  words: number;
+  chapters_current: number;
+  chapters_total: number;
+  rating: string;
+  warnings: string[];
+  categories: string[];
+  kudos: number;
+  hits: number;
+  bookmarks: number;
+  comments: number;
   summary: string;
   url: string;
+  status: 'to-read' | 'reading' | 'completed' | 'dropped' | 'want-to-read';
+  progress: number;
+  user_rating: number;
+  user_notes: string;
+  date_added: string;
+  date_started: string;
+  date_completed: string;
+  source: 'bookmarks' | 'history' | 'marked-for-later';
+  visit_count: number;
+  date_visited: string;
+  date_bookmarked: string;
+  date_marked: string;
+  additional_tags: string[];
 }
 
 interface Shelf {
@@ -74,27 +88,41 @@ const LibraryPage: React.FC = () => {
           const libraryResponse = await fetch('/api/library');
           const libraryData = await libraryResponse.json();
           
-          if (libraryData.library) {
+          if (libraryData.works) {
             // Convert database entries to Fic format
-            const realFics: Fic[] = libraryData.library.map((entry: any) => ({
-              id: entry.fanwork_id,
-              title: entry.fanworks?.title || 'Unknown Title',
-              author: entry.fanworks?.author || 'Unknown Author',
-              fandom: entry.fanworks?.fandom || 'Unknown Fandom',
-              relationship: entry.fanworks?.relationship || 'No Relationship',
-              wordCount: entry.fanworks?.word_count || 0,
-              chapters: `${entry.fanworks?.chapters_published || 1}/${entry.fanworks?.chapters_total || '?'}`,
-              status: entry.fanworks?.status || 'Unknown',
-              rating: entry.fanworks?.rating || 'NR',
-              userRating: entry.user_rating || 0,
-              readingStatus: entry.reading_status || 'want-to-read',
-              progress: entry.progress_percentage || 0,
-              dateAdded: entry.date_added ? new Date(entry.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              lastRead: entry.last_read ? new Date(entry.last_read).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              shelves: [],
-              tags: entry.fanworks?.additional_tags || [],
-              summary: entry.fanworks?.summary || 'No summary available',
-              url: `https://archiveofourown.org/works/${entry.fanworks?.ao3_work_id || entry.fanwork_id}`
+            const realFics: Fic[] = libraryData.works.map((work: any) => ({
+              id: work.id,
+              title: work.title || 'Unknown Title',
+              author: work.author || 'Unknown Author',
+              author_url: work.author_url || '',
+              fandoms: work.fandoms || [],
+              relationships: work.relationships || [],
+              characters: work.characters || [],
+              words: work.words || 0,
+              chapters_current: work.chapters_current || 1,
+              chapters_total: work.chapters_total || 1,
+              rating: work.rating || 'NR',
+              warnings: work.warnings || [],
+              categories: work.categories || [],
+              kudos: work.kudos || 0,
+              hits: work.hits || 0,
+              bookmarks: work.bookmarks || 0,
+              comments: work.comments || 0,
+              summary: work.summary || 'No summary available',
+              url: work.url || `https://archiveofourown.org/works/${work.id}`,
+              status: work.status || 'to-read',
+              progress: work.progress || 0,
+              user_rating: work.user_rating || 0,
+              user_notes: work.user_notes || '',
+              date_added: work.date_added ? new Date(work.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+              date_started: work.date_started ? new Date(work.date_started).toISOString().split('T')[0] : '',
+              date_completed: work.date_completed ? new Date(work.date_completed).toISOString().split('T')[0] : '',
+              source: work.source || 'history',
+              visit_count: work.visit_count || 1,
+              date_visited: work.date_visited ? new Date(work.date_visited).toISOString().split('T')[0] : '',
+              date_bookmarked: work.date_bookmarked ? new Date(work.date_bookmarked).toISOString().split('T')[0] : '',
+              date_marked: work.date_marked ? new Date(work.date_marked).toISOString().split('T')[0] : '',
+              additional_tags: work.additional_tags || []
             }));
             
             setFics(realFics);
@@ -110,29 +138,7 @@ const LibraryPage: React.FC = () => {
     fetchLibraryData();
   }, []);
 
-  // Convert scraped works to Fic format
-  const convertScrapedWorksToFics = (scrapedWorks: any[]): Fic[] => {
-    return scrapedWorks.map((work, index) => ({
-      id: work.ao3WorkId || work.id || index.toString(),
-      title: work.title || 'Untitled',
-      author: work.author || 'Unknown Author',
-      fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
-      relationship: work.relationships?.join(', ') || 'No Relationship',
-      wordCount: work.wordCount || 0,
-      chapters: `${work.chaptersPublished || 1}/${work.chaptersTotal || '?'}`,
-      status: work.status || 'Unknown',
-      rating: work.rating || 'NR',
-      userRating: 0,
-      readingStatus: 'want-to-read' as const,
-      progress: 0,
-      dateAdded: new Date().toISOString().split('T')[0],
-      lastRead: new Date().toISOString().split('T')[0],
-      shelves: [],
-      tags: work.additionalTags || [],
-      summary: work.summary || 'No summary available',
-      url: `https://archiveofourown.org/works/${work.ao3WorkId || work.id}`
-    }))
-  }
+
 
   // Default shelves
   const defaultShelves: Shelf[] = [
@@ -149,7 +155,7 @@ const LibraryPage: React.FC = () => {
     if (fics.length > 0) {
       const updatedShelves = defaultShelves.map(shelf => ({
         ...shelf,
-        ficCount: fics.filter(fic => fic.shelves.includes(shelf.id)).length
+        ficCount: fics.filter(fic => fic.source === shelf.id).length
       }));
       setShelves(updatedShelves);
     } else {
@@ -166,22 +172,24 @@ const LibraryPage: React.FC = () => {
 
   const filterTabs = [
     { id: 'all', label: 'All', icon: BookOpen, count: fics.length },
-    { id: 'currently-reading', label: 'Currently Reading', icon: Clock, count: fics.filter(f => f.readingStatus === 'currently-reading').length },
-    { id: 'want-to-read', label: 'Want to Read', icon: BookOpen, count: fics.filter(f => f.readingStatus === 'want-to-read').length },
-    { id: 'completed', label: 'Completed', icon: CheckCircle, count: fics.filter(f => f.readingStatus === 'completed').length },
-    { id: 'favorites', label: 'Favorites', icon: Heart, count: fics.filter(f => f.shelves.includes('1')).length },
+    { id: 'reading', label: 'Currently Reading', icon: Clock, count: fics.filter(f => f.status === 'reading').length },
+    { id: 'want-to-read', label: 'Want to Read', icon: Heart, count: fics.filter(f => f.status === 'want-to-read').length },
+    { id: 'completed', label: 'Completed', icon: CheckCircle, count: fics.filter(f => f.status === 'completed').length },
+    { id: 'bookmarks', label: 'Bookmarks', icon: Heart, count: fics.filter(f => f.source === 'bookmarks').length },
+    { id: 'marked-for-later', label: 'Marked for Later', icon: BookOpen, count: fics.filter(f => f.source === 'marked-for-later').length },
   ];
 
   const filteredFics = fics.filter(fic => {
     const matchesSearch = fic.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          fic.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         fic.fandom.toLowerCase().includes(searchTerm.toLowerCase());
+                         fic.fandoms.join(' ').toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesFilter = activeFilter === 'all' || 
-                         (activeFilter === 'favorites' && fic.shelves.includes('1')) ||
-                         fic.readingStatus === activeFilter;
+                         (activeFilter === 'bookmarks' && fic.source === 'bookmarks') ||
+                         (activeFilter === 'marked-for-later' && fic.source === 'marked-for-later') ||
+                         fic.status === activeFilter;
 
-    const matchesShelf = !selectedShelf || fic.shelves.includes(selectedShelf);
+    const matchesShelf = !selectedShelf || fic.source === selectedShelf;
 
     return matchesSearch && matchesFilter && matchesShelf;
   });
@@ -218,24 +226,25 @@ const LibraryPage: React.FC = () => {
         </div>
         
         <p className="text-sm text-gray-600 mb-1">by {fic.author}</p>
-        <p className="text-sm text-purple-600 mb-2">{fic.fandom}</p>
-        <p className="text-sm text-gray-700 mb-2">{fic.relationship}</p>
+        <p className="text-sm text-purple-600 mb-2">{fic.fandoms.join(', ')}</p>
+        <p className="text-sm text-gray-700 mb-2">{fic.relationships.join(', ')}</p>
         
         <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-          <span>{fic.wordCount.toLocaleString()} words</span>
+          <span>{fic.words.toLocaleString()} words</span>
           <span>•</span>
-          <span>{fic.chapters}</span>
+          <span>{fic.chapters_current}/{fic.chapters_total}</span>
           <span>•</span>
           <span className={`px-2 py-1 rounded ${
-            fic.status === 'Complete' ? 'bg-green-100 text-green-800' :
-            fic.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+            fic.status === 'completed' ? 'bg-green-100 text-green-800' :
+            fic.status === 'reading' ? 'bg-blue-100 text-blue-800' :
+            fic.status === 'want-to-read' ? 'bg-purple-100 text-purple-800' :
             'bg-gray-100 text-gray-800'
           }`}>
             {fic.status}
           </span>
         </div>
 
-        {fic.readingStatus === 'currently-reading' && (
+        {fic.status === 'reading' && (
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-600 mb-1">
               <span>Progress</span>
@@ -251,27 +260,30 @@ const LibraryPage: React.FC = () => {
         )}
 
         <div className="flex justify-between items-center">
-          <StarRating rating={fic.userRating} />
+          <StarRating rating={fic.user_rating} />
           <div className="flex gap-1">
-            {fic.shelves.map(shelfId => {
-              const shelf = shelves.find(s => s.id === shelfId);
-              return shelf ? (
-                <span key={shelf.id} className={`text-xs px-2 py-1 rounded-full ${shelf.color}`}>
-                  {shelf.name}
-                </span>
-              ) : null;
-            })}
+            <span
+              className={`text-xs px-2 py-1 rounded-full ${
+                fic.source === 'bookmarks' ? 'bg-green-100 text-green-800' :
+                fic.source === 'marked-for-later' ? 'bg-purple-100 text-purple-800' :
+                'bg-blue-100 text-blue-800'
+              }`}
+            >
+              {fic.source === 'bookmarks' ? 'Bookmarks' :
+               fic.source === 'marked-for-later' ? 'Marked for Later' :
+               'History'}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-1 mt-2">
-          {fic.tags.slice(0, 3).map(tag => (
+          {fic.additional_tags?.slice(0, 3).map((tag: string) => (
             <span key={tag} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
               {tag}
             </span>
           ))}
-          {fic.tags.length > 3 && (
-            <span className="text-xs px-2 py-1 text-gray-500">+{fic.tags.length - 3} more</span>
+          {fic.additional_tags && fic.additional_tags.length > 3 && (
+            <span className="text-xs px-2 py-1 text-gray-500">+{fic.additional_tags.length - 3} more</span>
           )}
         </div>
       </div>
@@ -294,22 +306,23 @@ const LibraryPage: React.FC = () => {
           </div>
           
           <p className="text-sm text-gray-600">by {fic.author}</p>
-          <p className="text-sm text-purple-600 mb-1">{fic.fandom}</p>
-          <p className="text-sm text-gray-700 mb-2">{fic.relationship}</p>
+          <p className="text-sm text-purple-600 mb-1">{fic.fandoms.join(', ')}</p>
+          <p className="text-sm text-gray-700 mb-2">{fic.relationships.join(', ')}</p>
           
           <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
-            <span>{fic.wordCount.toLocaleString()} words</span>
-            <span>{fic.chapters}</span>
+            <span>{fic.words.toLocaleString()} words</span>
+            <span>{fic.chapters_current}/{fic.chapters_total}</span>
             <span className={`px-2 py-1 rounded ${
-              fic.status === 'Complete' ? 'bg-green-100 text-green-800' :
-              fic.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+              fic.status === 'completed' ? 'bg-green-100 text-green-800' :
+              fic.status === 'reading' ? 'bg-blue-100 text-blue-800' :
+              fic.status === 'want-to-read' ? 'bg-purple-100 text-purple-800' :
               'bg-gray-100 text-gray-800'
             }`}>
               {fic.status}
             </span>
           </div>
 
-          {fic.readingStatus === 'currently-reading' && (
+          {fic.status === 'reading' && (
             <div className="mb-2 max-w-xs">
               <div className="flex justify-between text-xs text-gray-600 mb-1">
                 <span>Progress</span>
@@ -325,16 +338,19 @@ const LibraryPage: React.FC = () => {
           )}
 
           <div className="flex items-center justify-between">
-            <StarRating rating={fic.userRating} />
+            <StarRating rating={fic.user_rating} />
             <div className="flex gap-1">
-              {fic.shelves.map(shelfId => {
-                const shelf = shelves.find(s => s.id === shelfId);
-                return shelf ? (
-                  <span key={shelf.id} className={`text-xs px-2 py-1 rounded-full ${shelf.color}`}>
-                    {shelf.name}
-                  </span>
-                ) : null;
-              })}
+              <span
+                className={`text-xs px-2 py-1 rounded-full ${
+                  fic.source === 'bookmarks' ? 'bg-green-100 text-green-800' :
+                  fic.source === 'marked-for-later' ? 'bg-purple-100 text-purple-800' :
+                  'bg-blue-100 text-blue-800'
+                }`}
+              >
+                {fic.source === 'bookmarks' ? 'Bookmarks' :
+                 fic.source === 'marked-for-later' ? 'Marked for Later' :
+                 'History'}
+              </span>
             </div>
           </div>
         </div>

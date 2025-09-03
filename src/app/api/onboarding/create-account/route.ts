@@ -30,13 +30,13 @@ export async function POST(request: NextRequest) {
       return handleError(parseError, 'Invalid JSON in request body');
     }
     
-    const { email, username, displayName, importData } = requestData;
+    const { email, username, password, displayName, importData } = requestData;
 
     // Validate required fields
-    if (!email || !username || !displayName) {
+    if (!email || !username || !password || !displayName) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Email, username, and display name are required' 
+        error: 'Email, username, password, and display name are required' 
       }, { status: 400 });
     }
 
@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
     users.set(username, user);
     console.log('Onboarding API: User created in SimpleAuth:', username);
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     // Create user in database
     let { data: dbUser, error: dbError } = await supabase
       .from('users')
@@ -62,6 +65,7 @@ export async function POST(request: NextRequest) {
         id: user.id,
         email,
         username,
+        password: hashedPassword,
         display_name: displayName,
         onboarding_completed: false
       })
