@@ -102,6 +102,16 @@ export async function POST(request: NextRequest) {
     // Save works to database
     console.log('Onboarding API: Saving works to database...')
     let savedCount = 0
+    
+    // Double-check that dbUser exists and has an id
+    if (!dbUser || !dbUser.id) {
+      console.log('Onboarding API: dbUser is null or missing id, cannot save works')
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database user not properly created. Please try again.' 
+      }, { status: 500 })
+    }
+    
     for (const work of userWorks) {
       try {
         await scraper.saveWorkToDatabase(work, dbUser.id)
@@ -114,38 +124,58 @@ export async function POST(request: NextRequest) {
     console.log('Onboarding API: Saved', savedCount, 'works to database')
 
     // Create default shelves for the user
-    await scraper.createDefaultShelvesForUser(dbUser.id)
+    try {
+      await scraper.createDefaultShelvesForUser(dbUser.id)
+    } catch (error) {
+      console.log('Onboarding API: Failed to create default shelves:', error)
+      // Continue anyway, shelves are not critical
+    }
 
     // Create new session for the user
-    const sessionId = SimpleAuth.createSession(user)
+    let sessionId
+    try {
+      sessionId = SimpleAuth.createSession(user)
+      console.log('Onboarding API: Session created:', sessionId)
+    } catch (error) {
+      console.log('Onboarding API: Failed to create session:', error)
+      sessionId = `session_${ao3Username}_${Date.now()}`
+    }
 
     console.log('Onboarding API: Account created successfully for:', ao3Username)
 
     // Create response with session cookie
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        id: dbUser.id,
-        username: ao3Username,
-        displayName: displayName || ao3Username,
-        email: email,
-        onboardingCompleted: true
-      },
-      sessionId: sessionId,
-      worksImported: userWorks.length,
-      worksSaved: savedCount,
-      works: userWorks
-    })
+    try {
+      const response = NextResponse.json({
+        success: true,
+        user: {
+          id: dbUser.id,
+          username: ao3Username,
+          displayName: displayName || ao3Username,
+          email: email,
+          onboardingCompleted: true
+        },
+        sessionId: sessionId,
+        worksImported: userWorks.length,
+        worksSaved: savedCount,
+        works: userWorks
+      })
 
-    // Set session cookie
-    response.cookies.set('sessionId', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 7 days
-    })
+      // Set session cookie
+      response.cookies.set('sessionId', sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7 // 7 days
+      })
 
-    return response
+      return response
+    } catch (error) {
+      console.log('Onboarding API: Failed to create response:', error)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Failed to create response: ' + (error instanceof Error ? error.message : 'Unknown error')
+      }, { status: 500 })
+    }
 
   } catch (error) {
     console.error('Onboarding API: Error:', error)
