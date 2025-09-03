@@ -61,9 +61,35 @@ export default function Home() {
         body: JSON.stringify(onboardingData),
       })
 
-      const result = await response.json()
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Onboarding failed with status:', response.status, 'Response:', errorText)
+        
+        // Try to parse as JSON, but handle non-JSON responses
+        let errorMessage = 'Server error'
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMessage = errorJson.error || 'Server error'
+        } catch {
+          errorMessage = errorText || 'Server error'
+        }
+        
+        alert('Onboarding failed: ' + errorMessage)
+        return
+      }
 
-      if (response.ok && result.success) {
+      // Try to parse JSON response
+      let result
+      try {
+        result = await response.json()
+      } catch (parseError) {
+        console.error('Failed to parse JSON response:', parseError)
+        alert('Onboarding failed: Invalid response from server')
+        return
+      }
+
+      if (result.success) {
         console.log('Onboarding successful:', result)
         // Set the user data from the response instead of reloading
         setUser({
