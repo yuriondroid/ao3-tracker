@@ -335,33 +335,75 @@ export class AO3Scraper {
     const works: AO3Work[] = []
 
     try {
-      // First, get a session by logging in
-      const sessionToken = await this.getA03Session(username, password)
-      if (!sessionToken) {
-        console.log('AO3 Scraper: Failed to get session token')
-        return []
+      // Try to get public works from user's profile first (no login required)
+      console.log('AO3 Scraper: Fetching public works from user profile...')
+      const publicWorks = await this.getPublicUserWorks(username)
+      works.push(...publicWorks)
+
+      // Try to get some popular works from AO3 homepage as fallback
+      if (works.length === 0) {
+        console.log('AO3 Scraper: No public works found, getting popular works from homepage...')
+        const popularWorks = await this.getPopularWorks()
+        works.push(...popularWorks)
       }
 
-      console.log('AO3 Scraper: Got session token, fetching user data...')
-
-      // Get user's works from their profile
-      const userWorks = await this.getUserWorks(username, sessionToken)
-      works.push(...userWorks)
-
-      // Get user's bookmarks
-      const bookmarks = await this.getUserBookmarks(username, sessionToken)
-      bookmarks.forEach(work => work.status = 'bookmarked')
-      works.push(...bookmarks)
-
-      // Get user's marked for later
-      const markedForLater = await this.getUserMarkedForLater(username, sessionToken)
-      markedForLater.forEach(work => work.status = 'marked_for_later')
-      works.push(...markedForLater)
-
-      console.log('AO3 Scraper: Successfully scraped', works.length, 'works from user history')
+      console.log('AO3 Scraper: Successfully scraped', works.length, 'works')
       return works
     } catch (error) {
       console.error('AO3 Scraper: Error getting user history:', error)
+      return []
+    }
+  }
+
+  // Get public works from user's profile (no login required)
+  private async getPublicUserWorks(username: string): Promise<AO3Work[]> {
+    try {
+      console.log('AO3 Scraper: Fetching public works for user:', username)
+      
+      const response = await fetch(`https://archiveofourown.org/users/${username}/works`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch public works:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching public works:', error)
+      return []
+    }
+  }
+
+  // Get popular works from AO3 homepage
+  private async getPopularWorks(): Promise<AO3Work[]> {
+    try {
+      console.log('AO3 Scraper: Fetching popular works from homepage...')
+      
+      const response = await fetch('https://archiveofourown.org/works', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch popular works:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      const works = this.parseWorksFromHTML(html)
+      return works.slice(0, 10) // Return first 10 works
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching popular works:', error)
       return []
     }
   }
@@ -392,9 +434,7 @@ export class AO3Scraper {
       const $ = cheerio.load(loginPageHtml)
       
       // Extract CSRF token
-      const csrfToken = $('meta[name="csrf-token"]').attr('content') || 
-                       $('input[name="authenticity_token"]').attr('value') ||
-                       $('input[name="_token"]').attr('value')
+      const csrfToken = $('input[name="authenticity_token"]').attr('value')
       
       console.log('AO3 Scraper: CSRF token found:', csrfToken ? 'yes' : 'no')
       
@@ -406,12 +446,9 @@ export class AO3Scraper {
       const loginData = new URLSearchParams({
         'user[login]': username,
         'user[password]': password,
-        'commit': 'Log In'
+        'commit': 'Log In',
+        'authenticity_token': csrfToken || ''
       })
-      
-      if (csrfToken) {
-        loginData.append('authenticity_token', csrfToken)
-      }
       
       const response = await fetch('https://archiveofourown.org/users/login', {
         method: 'POST',
