@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
-import { createServerSupabaseClient } from '@/lib/supabase'
+import { SimpleAuth } from '@/lib/simple-auth'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
+  // Get session from cookies
+  const sessionId = request.cookies.get('session')?.value
+  
+  if (!sessionId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createServerSupabaseClient()
+  const user = SimpleAuth.getUserFromSession(sessionId)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   
   try {
     const { data: libraryEntries, error } = await supabase
@@ -18,7 +27,7 @@ export async function GET(request: NextRequest) {
         *,
         fanworks (*)
       `)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .order('date_added', { ascending: false })
     
     if (error) {
@@ -37,20 +46,30 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
+  // Get session from cookies
+  const sessionId = request.cookies.get('session')?.value
+  
+  if (!sessionId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const user = SimpleAuth.getUserFromSession(sessionId)
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { libraryEntryId, updates } = await request.json()
-  const supabase = createServerSupabaseClient()
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   
   try {
     const { data, error } = await supabase
       .from('user_library')
       .update(updates)
       .eq('id', libraryEntryId)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .select()
       .single()
     
