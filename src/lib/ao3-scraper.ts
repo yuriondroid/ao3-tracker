@@ -353,11 +353,38 @@ export class AO3Scraper {
         works.push(...publicWorks)
       }
 
-      // If still no works, get popular works as final fallback
+      // If still no works, try to get your actual reading history with a different approach
       if (works.length === 0) {
-        console.log('AO3 Scraper: No works found, getting popular works from homepage...')
-        const popularWorks = await this.getPopularWorks()
-        works.push(...popularWorks)
+        console.log('AO3 Scraper: No works found, trying alternative method to get reading history...')
+        
+        // Try to get your reading history directly from the readings page
+        try {
+          const readingsResponse = await fetch(`https://archiveofourown.org/users/${username}/readings`, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5'
+            }
+          })
+          
+          if (readingsResponse.ok) {
+            const readingsHtml = await readingsResponse.text()
+            const readingsWorks = this.parseWorksFromHTML(readingsHtml)
+            if (readingsWorks.length > 0) {
+              console.log('AO3 Scraper: Found', readingsWorks.length, 'works in reading history')
+              works.push(...readingsWorks)
+            }
+          }
+        } catch (error) {
+          console.log('AO3 Scraper: Failed to get reading history:', error)
+        }
+        
+        // Only fallback to popular works if we still have nothing
+        if (works.length === 0) {
+          console.log('AO3 Scraper: Still no works found, getting popular works from homepage...')
+          const popularWorks = await this.getPopularWorks()
+          works.push(...popularWorks)
+        }
       }
 
       console.log('AO3 Scraper: Successfully scraped', works.length, 'works')
