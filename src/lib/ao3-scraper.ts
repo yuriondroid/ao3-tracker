@@ -371,17 +371,62 @@ export class AO3Scraper {
     try {
       console.log('AO3 Scraper: Getting session token...')
       
+      // First get the login page to extract CSRF token
+      const loginPageResponse = await fetch('https://archiveofourown.org/users/login', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
+        }
+      })
+
+      if (!loginPageResponse.ok) {
+        console.log('AO3 Scraper: Failed to get login page:', loginPageResponse.status)
+        return null
+      }
+
+      const loginPageHtml = await loginPageResponse.text()
+      const $ = cheerio.load(loginPageHtml)
+      
+      // Extract CSRF token
+      const csrfToken = $('meta[name="csrf-token"]').attr('content') || 
+                       $('input[name="authenticity_token"]').attr('value') ||
+                       $('input[name="_token"]').attr('value')
+      
+      console.log('AO3 Scraper: CSRF token found:', csrfToken ? 'yes' : 'no')
+      
+      // Get cookies from login page
+      const cookies = loginPageResponse.headers.get('set-cookie')
+      const cookieHeader = cookies ? cookies.split(';')[0] : ''
+      
+      // Now submit the login form
+      const loginData = new URLSearchParams({
+        'user[login]': username,
+        'user[password]': password,
+        'commit': 'Log In'
+      })
+      
+      if (csrfToken) {
+        loginData.append('authenticity_token', csrfToken)
+      }
+      
       const response = await fetch('https://archiveofourown.org/users/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Referer': 'https://archiveofourown.org/users/login',
+          'Origin': 'https://archiveofourown.org',
+          'Cookie': cookieHeader
         },
-        body: new URLSearchParams({
-          'user[login]': username,
-          'user[password]': password,
-          'commit': 'Log In'
-        })
+        body: loginData
       })
 
       if (!response.ok) {
@@ -397,6 +442,22 @@ export class AO3Scraper {
           console.log('AO3 Scraper: Got session token')
           return sessionMatch[1]
         }
+      }
+
+      // Check if we got redirected to user profile (successful login)
+      const responseText = await response.text()
+      if (responseText.includes(`/users/${username}`) || responseText.includes('Logout') || responseText.includes('Sign out')) {
+        console.log('AO3 Scraper: Login successful (found user profile or logout link)')
+        // Extract session from the response cookies
+        const allCookies = response.headers.get('set-cookie')
+        if (allCookies) {
+          const sessionMatch = allCookies.match(/_otwarchive_session=([^;]+)/)
+          if (sessionMatch) {
+            return sessionMatch[1]
+          }
+        }
+        // If no session token but login was successful, return a placeholder
+        return 'authenticated'
       }
 
       console.log('AO3 Scraper: No session token found in response')
