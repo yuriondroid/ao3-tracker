@@ -1,90 +1,53 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { SimpleAuth } from '@/lib/simple-auth'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET(request: NextRequest) {
-  // Get session from cookies
-  const sessionId = request.cookies.get('session')?.value
-  
-  if (!sessionId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const user = SimpleAuth.getUserFromSession(sessionId)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-  
   try {
-    const { data: libraryEntries, error } = await supabase
-      .from('user_library')
-      .select(`
-        *,
-        fanworks (*)
-      `)
-      .eq('user_id', user.id)
-      .order('date_added', { ascending: false })
+    // Get user from session
+    const sessionId = request.cookies.get('sessionId')?.value;
     
-    if (error) {
-      console.error('Library fetch error:', error)
-      throw error
+    if (!sessionId) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No session found' 
+      }, { status: 401 });
     }
-    
-    return NextResponse.json({ 
-      library: libraryEntries || [],
-      count: libraryEntries?.length || 0
-    })
-  } catch (error) {
-    console.error('Error fetching library:', error)
-    return NextResponse.json({ error: 'Failed to fetch library' }, { status: 500 })
-  }
-}
 
-export async function PUT(request: NextRequest) {
-  // Get session from cookies
-  const sessionId = request.cookies.get('session')?.value
-  
-  if (!sessionId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    // Get user ID from session (you'll need to implement this based on your session system)
+    // For now, we'll use a placeholder - you should get this from your session
+    const userId = 'placeholder-user-id'; // Replace with actual user ID from session
 
-  const user = SimpleAuth.getUserFromSession(sessionId)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    // Fetch works from database
+    const { data: works, error } = await supabase
+      .from('works')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date_added', { ascending: false });
 
-  const { libraryEntryId, updates } = await request.json()
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-  
-  try {
-    const { data, error } = await supabase
-      .from('user_library')
-      .update(updates)
-      .eq('id', libraryEntryId)
-      .eq('user_id', user.id)
-      .select()
-      .single()
-    
     if (error) {
-      console.error('Library update error:', error)
-      throw error
+      console.error('Failed to fetch works:', error);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Failed to fetch library data' 
+      }, { status: 500 });
     }
-    
-    return NextResponse.json({ 
-      success: true, 
-      entry: data 
-    })
+
+    return NextResponse.json({
+      success: true,
+      works: works || []
+    });
+
   } catch (error) {
-    console.error('Error updating library entry:', error)
-    return NextResponse.json({ error: 'Failed to update library entry' }, { status: 500 })
+    console.error('Library API error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Internal server error' 
+    }, { status: 500 });
   }
 }
 

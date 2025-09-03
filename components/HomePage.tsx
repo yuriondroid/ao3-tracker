@@ -1,304 +1,274 @@
-// src/components/HomePage.tsx
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { 
   BookOpen, 
-  Plus, 
+  Clock, 
+  CheckCircle, 
+  Heart, 
   TrendingUp, 
-  Clock,
-  Star,
-  Users,
-  ArrowRight,
-  Loader2
+  Calendar,
+  BarChart3,
+  Bookmark,
+  Eye
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
 interface Work {
   id: string;
   title: string;
   author: string;
-  fandom: string;
-  rating?: number;
+  words: number;
   status: string;
-  progress?: number;
-  chapters?: string;
-  wordCount?: number;
-  kudos?: number;
-  hits?: number;
-  bookmarks?: number;
-  comments?: number;
-  publishedDate?: Date;
-  updatedDate?: Date;
+  source: string;
+  date_added: string;
+  kudos: number;
+  hits: number;
+  bookmarks: number;
 }
 
 interface Stats {
-  totalFics: number;
-  wordsRead: number;
+  totalWorks: number;
+  totalWords: number;
   currentlyReading: number;
-  favorites: number;
   completed: number;
+  wantToRead: number;
+  bookmarks: number;
+  markedForLater: number;
   totalKudos: number;
   totalHits: number;
+  totalBookmarks: number;
 }
 
 const HomePage: React.FC = () => {
+  const [user, setUser] = useState<any>(null);
+  const [works, setWorks] = useState<Work[]>([]);
   const [stats, setStats] = useState<Stats>({
-    totalFics: 0,
-    wordsRead: 0,
+    totalWorks: 0,
+    totalWords: 0,
     currentlyReading: 0,
-    favorites: 0,
     completed: 0,
+    wantToRead: 0,
+    bookmarks: 0,
+    markedForLater: 0,
     totalKudos: 0,
-    totalHits: 0
+    totalHits: 0,
+    totalBookmarks: 0
   });
-  const [recentActivity, setRecentActivity] = useState<Work[]>([]);
-  const [currentlyReading, setCurrentlyReading] = useState<Work[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardData();
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get user session
+        const sessionResponse = await fetch('/api/session');
+        const sessionData = await sessionResponse.json();
+
+        if (sessionData.authenticated) {
+          setUser(sessionData.user);
+          
+          // Fetch library data
+          const libraryResponse = await fetch('/api/library');
+          const libraryData = await libraryResponse.json();
+          
+          if (libraryData.success && libraryData.works) {
+            setWorks(libraryData.works);
+            
+            // Calculate stats
+            const calculatedStats: Stats = {
+              totalWorks: libraryData.works.length,
+              totalWords: libraryData.works.reduce((sum: number, work: Work) => sum + (work.words || 0), 0),
+              currentlyReading: libraryData.works.filter((work: Work) => work.status === 'reading').length,
+              completed: libraryData.works.filter((work: Work) => work.status === 'completed').length,
+              wantToRead: libraryData.works.filter((work: Work) => work.status === 'want-to-read').length,
+              bookmarks: libraryData.works.filter((work: Work) => work.source === 'bookmarks').length,
+              markedForLater: libraryData.works.filter((work: Work) => work.source === 'marked-for-later').length,
+              totalKudos: libraryData.works.reduce((sum: number, work: Work) => sum + (work.kudos || 0), 0),
+              totalHits: libraryData.works.reduce((sum: number, work: Work) => sum + (work.hits || 0), 0),
+              totalBookmarks: libraryData.works.reduce((sum: number, work: Work) => sum + (work.bookmarks || 0), 0)
+            };
+            
+            setStats(calculatedStats);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      // Get user's works from the session
-      const sessionResponse = await fetch('/api/session');
-      const sessionData = await sessionResponse.json();
-      
-      if (!sessionData.user) {
-        console.log('No user session found');
-        return;
-      }
-
-      const userId = sessionData.user.id;
-      
-      // Fetch real data from the database
-      const libraryResponse = await fetch('/api/library');
-      const libraryData = await libraryResponse.json();
-      
-      if (!libraryData.library) {
-        console.log('No library data found');
-        return;
-      }
-
-      // Convert database format to Work interface
-      const realWorks: Work[] = libraryData.library.map((entry: any) => ({
-        id: entry.fanwork_id,
-        title: entry.fanworks?.title || 'Unknown Title',
-        author: entry.fanworks?.author || 'Unknown Author',
-        fandom: entry.fanworks?.fandom || 'Unknown Fandom',
-        status: entry.reading_status || 'to-read',
-        progress: entry.progress_percentage || 0,
-        chapters: `${entry.current_chapter || 1}/${entry.fanworks?.chapters_total || '?'}`,
-        wordCount: entry.fanworks?.word_count || 0,
-        kudos: entry.fanworks?.kudos || 0,
-        hits: entry.fanworks?.hits || 0,
-        bookmarks: entry.fanworks?.bookmarks || 0,
-        comments: entry.fanworks?.comments || 0,
-        publishedDate: entry.fanworks?.published_date ? new Date(entry.fanworks.published_date) : undefined,
-        updatedDate: entry.fanworks?.updated_date ? new Date(entry.fanworks.updated_date) : undefined
-      }));
-
-      // Calculate real stats from the database
-      const calculatedStats: Stats = {
-        totalFics: realWorks.length,
-        wordsRead: realWorks.reduce((sum, work) => sum + (work.wordCount || 0), 0),
-        currentlyReading: realWorks.filter(w => w.status === 'currently-reading').length,
-        favorites: realWorks.filter(w => w.status === 'bookmarked').length,
-        completed: realWorks.filter(w => w.status === 'completed').length,
-        totalKudos: realWorks.reduce((sum, work) => sum + (work.kudos || 0), 0),
-        totalHits: realWorks.reduce((sum, work) => sum + (work.hits || 0), 0)
-      };
-
-      setStats(calculatedStats);
-      setCurrentlyReading(realWorks.filter(w => w.status === 'currently-reading').slice(0, 3));
-      setRecentActivity(realWorks.slice(0, 5));
-      
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 text-purple-600 animate-spin mx-auto mb-4" />
-            <p className="text-gray-600">Loading your dashboard...</p>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
+  const recentWorks = works.slice(0, 5);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Welcome Section */}
+      {/* Welcome Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome back! 📖
+          Welcome back, {user?.displayName || user?.username || 'User'}!
         </h1>
         <p className="text-gray-600">
-          Ready to dive into your next great read?
+          Here's what's happening with your AO3 library
         </p>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="flex items-center gap-2 mb-1">
-            <BookOpen className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-gray-600">Total Fics</span>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <BookOpen className="w-6 h-6 text-purple-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Works</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalWorks}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalFics}</p>
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-medium text-gray-600">Words Read</span>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Clock className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Currently Reading</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.currentlyReading}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {stats.wordsRead.toLocaleString()}
-          </p>
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-orange-600" />
-            <span className="text-sm font-medium text-gray-600">Reading</span>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.completed}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.currentlyReading}</p>
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
-          <div className="flex items-center gap-2 mb-1">
-            <Star className="w-4 h-4 text-yellow-600" />
-            <span className="text-sm font-medium text-gray-600">Favorites</span>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-yellow-100 rounded-lg">
+              <Heart className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Want to Read</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.wantToRead}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.favorites}</p>
         </div>
       </div>
 
-      {/* Currently Reading */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Currently Reading</h2>
-          <Link href="/library" className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1">
-            View all
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Words Read</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalWords.toLocaleString()}</p>
+            </div>
+            <TrendingUp className="w-8 h-8 text-green-600" />
+          </div>
         </div>
 
-        {currentlyReading.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {currentlyReading.map((fic) => (
-              <div key={fic.id} className="bg-white rounded-lg p-4 shadow-sm border">
-                <h3 className="font-semibold text-gray-900 mb-1">{fic.title}</h3>
-                <p className="text-sm text-gray-600 mb-2">by {fic.author}</p>
-                <p className="text-xs text-gray-500 mb-3">{fic.fandom}</p>
-                
-                <div className="mb-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
-                    <span>Progress</span>
-                    <span>{fic.progress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${fic.progress}%` }}
-                    />
-                  </div>
-                </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Bookmarks</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.bookmarks}</p>
+            </div>
+            <Bookmark className="w-8 h-8 text-blue-600" />
+          </div>
+        </div>
 
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{fic.chapters}</span>
-                  <span>{fic.wordCount?.toLocaleString()} words</span>
-                </div>
-              </div>
-            ))}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Marked for Later</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.markedForLater}</p>
+            </div>
+            <Calendar className="w-8 h-8 text-purple-600" />
           </div>
-        ) : (
-          <div className="bg-white rounded-lg p-8 text-center border-2 border-dashed border-gray-300">
-            <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No works in progress</h3>
-            <p className="text-gray-600 mb-4">Start reading something from your library!</p>
-            <Link href="/library" className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-              <Plus className="w-4 h-4 mr-2" />
-              Browse Library
-            </Link>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Recent Activity */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
-          <Link href="/library" className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1">
-            View all
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Recent Works</h2>
         </div>
-
-        <div className="bg-white rounded-lg shadow-sm border">
-          {recentActivity.length > 0 ? (
-            <div className="divide-y divide-gray-200">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <BookOpen className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{activity.title}</p>
-                      <p className="text-sm text-gray-600">by {activity.author}</p>
+        <div className="p-6">
+          {recentWorks.length > 0 ? (
+            <div className="space-y-4">
+              {recentWorks.map((work) => (
+                <div key={work.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900">{work.title}</h3>
+                    <p className="text-sm text-gray-600">by {work.author}</p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      <span>{work.words.toLocaleString()} words</span>
+                      <span>•</span>
+                      <span className={`px-2 py-1 rounded ${
+                        work.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        work.status === 'reading' ? 'bg-blue-100 text-blue-800' :
+                        work.status === 'want-to-read' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {work.status}
+                      </span>
+                      <span>•</span>
+                      <span className={`px-2 py-1 rounded ${
+                        work.source === 'bookmarks' ? 'bg-green-100 text-green-800' :
+                        work.source === 'marked-for-later' ? 'bg-purple-100 text-purple-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {work.source === 'bookmarks' ? 'Bookmarks' :
+                         work.source === 'marked-for-later' ? 'Marked for Later' :
+                         'History'}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">{activity.fandom}</p>
-                    <p className="text-xs text-gray-400">Added recently</p>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3 h-3" />
+                      <span>{work.kudos}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      <span>{work.hits}</span>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="p-8 text-center">
-              <p className="text-gray-600">No recent activity</p>
+            <div className="text-center py-8">
+              <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No works imported yet</p>
+              <p className="text-sm text-gray-500">Import your AO3 data to get started</p>
             </div>
           )}
         </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link href="/add" className="bg-white rounded-lg p-6 shadow-sm border hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Plus className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Add New Work</h3>
-              <p className="text-sm text-gray-600">Manually add a fic to your library</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link href="/discover" className="bg-white rounded-lg p-6 shadow-sm border hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Discover</h3>
-              <p className="text-sm text-gray-600">Find new works to read</p>
-            </div>
-          </div>
-        </Link>
       </div>
     </div>
   );
