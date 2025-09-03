@@ -1,0 +1,551 @@
+'use client';
+
+import React, { useState } from 'react';
+import { 
+  BookOpen, 
+  Grid, 
+  List, 
+  Search, 
+  Filter,
+  Star,
+  Clock,
+  CheckCircle,
+  Heart,
+  MoreVertical,
+  Edit,
+  Trash2
+} from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+interface Fic {
+  id: string;
+  title: string;
+  author: string;
+  fandom: string;
+  relationship: string;
+  wordCount: number;
+  chapters: string;
+  status: 'Complete' | 'In Progress' | 'Abandoned';
+  rating: 'G' | 'T' | 'M' | 'E' | 'NR';
+  userRating: number;
+  readingStatus: 'want-to-read' | 'currently-reading' | 'completed';
+  progress: number;
+  dateAdded: string;
+  lastRead: string;
+  shelves: string[];
+  tags: string[];
+  summary: string;
+  url: string;
+}
+
+interface Shelf {
+  id: string;
+  name: string;
+  color: string;
+  ficCount: number;
+}
+
+const LibraryPage: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [selectedShelf, setSelectedShelf] = useState<string>('');
+  const [sortBy, setSortBy] = useState('dateAdded');
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Get user data from session
+  React.useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/session')
+        const data = await response.json()
+
+        if (data.authenticated) {
+          setUser(data.user)
+        }
+      } catch (error) {
+        console.error('Session check error:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkSession()
+  }, [])
+
+  // Convert scraped works to Fic format
+  const convertScrapedWorksToFics = (scrapedWorks: any[]): Fic[] => {
+    return scrapedWorks.map((work, index) => ({
+      id: work.ao3WorkId || work.id || index.toString(),
+      title: work.title || 'Untitled',
+      author: work.author || 'Unknown Author',
+      fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
+      relationship: work.relationships?.join(', ') || 'No Relationship',
+      wordCount: work.wordCount || 0,
+      chapters: `${work.chaptersPublished || 1}/${work.chaptersTotal || '?'}`,
+      status: work.status || 'Unknown',
+      rating: work.rating || 'NR',
+      userRating: 0,
+      readingStatus: 'want-to-read' as const,
+      progress: 0,
+      dateAdded: new Date().toISOString().split('T')[0],
+      lastRead: new Date().toISOString().split('T')[0],
+      shelves: [],
+      tags: work.additionalTags || [],
+      summary: work.summary || 'No summary available',
+      url: `https://archiveofourown.org/works/${work.ao3WorkId || work.id}`
+    }))
+  }
+
+  // Use real data if available, otherwise fallback to mock data
+  const [shelves] = useState<Shelf[]>([
+    { id: '1', name: 'Favorites', color: 'bg-red-100 text-red-800', ficCount: 0 },
+    { id: '2', name: 'Currently Reading', color: 'bg-blue-100 text-blue-800', ficCount: 0 },
+    { id: '3', name: 'Want to Read', color: 'bg-yellow-100 text-yellow-800', ficCount: 0 },
+    { id: '4', name: 'Completed', color: 'bg-green-100 text-green-800', ficCount: 0 },
+    { id: '5', name: 'Angst That Destroyed Me', color: 'bg-purple-100 text-purple-800', ficCount: 0 },
+    { id: '6', name: 'Comfort Reads', color: 'bg-pink-100 text-pink-800', ficCount: 0 },
+  ]);
+
+  const [fics, setFics] = useState<Fic[]>([]);
+
+  // Fetch real data from database
+  const fetchLibraryData = async () => {
+    if (!user?.id) return;
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    try {
+      // Fetch user's library entries with fanwork details
+      const { data: libraryEntries, error } = await supabase
+        .from('user_library')
+        .select(`
+          *,
+          fanworks (*)
+        `)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Failed to fetch library data:', error);
+        return;
+      }
+
+      if (libraryEntries && libraryEntries.length > 0) {
+        // Convert database entries to Fic format
+        const realFics = libraryEntries.map(entry => ({
+          id: entry.fanworks.ao3_work_id,
+          title: entry.fanworks.title,
+          author: entry.fanworks.author,
+          fandom: entry.fanworks.fandom,
+          relationship: entry.fanworks.relationship || 'No Relationship',
+          wordCount: entry.fanworks.word_count || 0,
+          chapters: `${entry.fanworks.chapters_published || 1}/${entry.fanworks.chapters_total || '?'}`,
+          status: entry.fanworks.status || 'Unknown',
+          rating: entry.fanworks.rating || 'NR',
+          userRating: entry.user_rating || 0,
+          readingStatus: entry.reading_status as any,
+          progress: entry.progress_percentage || 0,
+          dateAdded: entry.date_added?.split('T')[0] || new Date().toISOString().split('T')[0],
+          lastRead: entry.last_read?.split('T')[0] || new Date().toISOString().split('T')[0],
+          shelves: [], // TODO: Fetch shelves
+          tags: entry.fanworks.additional_tags || [],
+          summary: entry.fanworks.summary || 'No summary available',
+          url: `https://archiveofourown.org/works/${entry.fanworks.ao3_work_id}`
+        }));
+        setFics(realFics);
+      } else {
+        // Fallback to scraped works if no database entries
+        if (user?.scrapedWorks && user.scrapedWorks.length > 0) {
+          const realFics = convertScrapedWorksToFics(user.scrapedWorks);
+          setFics(realFics);
+        } else {
+          // Fallback to mock data
+          setFics([
+            {
+              id: '1',
+              title: 'The Art of Falling in Love',
+              author: 'SkillfulWriter',
+              fandom: 'Harry Potter',
+              relationship: 'Harry Potter/Draco Malfoy',
+              wordCount: 125000,
+              chapters: '15/15',
+              status: 'Complete',
+              rating: 'M',
+              userRating: 5,
+              readingStatus: 'completed',
+              progress: 100,
+              dateAdded: '2024-08-15',
+              lastRead: '2024-09-01',
+              shelves: ['1', '4'],
+              tags: ['Enemies to Lovers', 'Auror Harry', 'Healer Draco', 'Angst with Happy Ending'],
+              summary: 'When Harry and Draco are forced to work together on a case...',
+              url: 'https://archiveofourown.org/works/123456'
+            }
+          ]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch library data:', error);
+      // Fallback to mock data
+      setFics([
+        {
+          id: '1',
+          title: 'The Art of Falling in Love',
+          author: 'SkillfulWriter',
+          fandom: 'Harry Potter',
+          relationship: 'Harry Potter/Draco Malfoy',
+          wordCount: 125000,
+          chapters: '15/15',
+          status: 'Complete',
+          rating: 'M',
+          userRating: 5,
+          readingStatus: 'completed',
+          progress: 100,
+          dateAdded: '2024-08-15',
+          lastRead: '2024-09-01',
+          shelves: ['1', '4'],
+          tags: ['Enemies to Lovers', 'Auror Harry', 'Healer Draco', 'Angst with Happy Ending'],
+          summary: 'When Harry and Draco are forced to work together on a case...',
+          url: 'https://archiveofourown.org/works/123456'
+        }
+      ]);
+    }
+  };
+
+  // Update fics when user data changes
+  React.useEffect(() => {
+    if (user) {
+      fetchLibraryData();
+    }
+  }, [user]);
+
+  const filterTabs = [
+    { id: 'all', label: 'All', icon: BookOpen, count: fics.length },
+    { id: 'currently-reading', label: 'Currently Reading', icon: Clock, count: fics.filter(f => f.readingStatus === 'currently-reading').length },
+    { id: 'want-to-read', label: 'Want to Read', icon: BookOpen, count: fics.filter(f => f.readingStatus === 'want-to-read').length },
+    { id: 'completed', label: 'Completed', icon: CheckCircle, count: fics.filter(f => f.readingStatus === 'completed').length },
+    { id: 'favorites', label: 'Favorites', icon: Heart, count: fics.filter(f => f.shelves.includes('1')).length },
+  ];
+
+  const filteredFics = fics.filter(fic => {
+    const matchesSearch = fic.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         fic.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         fic.fandom.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesFilter = activeFilter === 'all' || 
+                         (activeFilter === 'favorites' && fic.shelves.includes('1')) ||
+                         fic.readingStatus === activeFilter;
+
+    const matchesShelf = !selectedShelf || fic.shelves.includes(selectedShelf);
+
+    return matchesSearch && matchesFilter && matchesShelf;
+  });
+
+  const updateProgress = (ficId: string, newProgress: number) => {
+    console.log(`Updating fic ${ficId} to ${newProgress}% progress`);
+    // This would update the database
+  };
+
+  const StarRating: React.FC<{ rating: number; onRate?: (rating: number) => void }> = ({ rating, onRate }) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`w-4 h-4 ${onRate ? 'cursor-pointer' : ''} ${
+              star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+            }`}
+            onClick={onRate ? () => onRate(star) : undefined}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const FicCard: React.FC<{ fic: Fic }> = ({ fic }) => (
+    <div className="bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow">
+      <div className="p-4">
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="font-semibold text-gray-900 line-clamp-2">{fic.title}</h3>
+          <button className="text-gray-400 hover:text-gray-600">
+            <MoreVertical className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <p className="text-sm text-gray-600 mb-1">by {fic.author}</p>
+        <p className="text-sm text-purple-600 mb-2">{fic.fandom}</p>
+        <p className="text-sm text-gray-700 mb-2">{fic.relationship}</p>
+        
+        <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+          <span>{fic.wordCount.toLocaleString()} words</span>
+          <span>•</span>
+          <span>{fic.chapters}</span>
+          <span>•</span>
+          <span className={`px-2 py-1 rounded ${
+            fic.status === 'Complete' ? 'bg-green-100 text-green-800' :
+            fic.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {fic.status}
+          </span>
+        </div>
+
+        {fic.readingStatus === 'currently-reading' && (
+          <div className="mb-3">
+            <div className="flex justify-between text-xs text-gray-600 mb-1">
+              <span>Progress</span>
+              <span>{fic.progress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full" 
+                style={{ width: `${fic.progress}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center">
+          <StarRating rating={fic.userRating} />
+          <div className="flex gap-1">
+            {fic.shelves.map(shelfId => {
+              const shelf = shelves.find(s => s.id === shelfId);
+              return shelf ? (
+                <span key={shelf.id} className={`text-xs px-2 py-1 rounded-full ${shelf.color}`}>
+                  {shelf.name}
+                </span>
+              ) : null;
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1 mt-2">
+          {fic.tags.slice(0, 3).map(tag => (
+            <span key={tag} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+              {tag}
+            </span>
+          ))}
+          {fic.tags.length > 3 && (
+            <span className="text-xs px-2 py-1 text-gray-500">+{fic.tags.length - 3} more</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const FicListItem: React.FC<{ fic: Fic }> = ({ fic }) => (
+    <div className="bg-white border rounded-lg p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-center gap-4">
+        <div className="w-16 h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+          <BookOpen className="w-6 h-6 text-gray-400" />
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-start mb-1">
+            <h3 className="font-semibold text-gray-900 truncate">{fic.title}</h3>
+            <button className="text-gray-400 hover:text-gray-600 ml-2">
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </div>
+          
+          <p className="text-sm text-gray-600">by {fic.author}</p>
+          <p className="text-sm text-purple-600 mb-1">{fic.fandom}</p>
+          <p className="text-sm text-gray-700 mb-2">{fic.relationship}</p>
+          
+          <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
+            <span>{fic.wordCount.toLocaleString()} words</span>
+            <span>{fic.chapters}</span>
+            <span className={`px-2 py-1 rounded ${
+              fic.status === 'Complete' ? 'bg-green-100 text-green-800' :
+              fic.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {fic.status}
+            </span>
+          </div>
+
+          {fic.readingStatus === 'currently-reading' && (
+            <div className="mb-2 max-w-xs">
+              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                <span>Progress</span>
+                <span>{fic.progress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full" 
+                  style={{ width: `${fic.progress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <StarRating rating={fic.userRating} />
+            <div className="flex gap-1">
+              {fic.shelves.map(shelfId => {
+                const shelf = shelves.find(s => s.id === shelfId);
+                return shelf ? (
+                  <span key={shelf.id} className={`text-xs px-2 py-1 rounded-full ${shelf.color}`}>
+                    {shelf.name}
+                  </span>
+                ) : null;
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">My Library</h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <Grid className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <List className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Sidebar */}
+        <div className="lg:w-64 flex-shrink-0">
+          {/* Filters */}
+          <div className="bg-white rounded-lg border p-4 mb-6">
+            <h2 className="font-semibold text-gray-900 mb-3">Filters</h2>
+            <div className="space-y-2">
+              {filterTabs.map(tab => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveFilter(tab.id)}
+                    className={`w-full flex items-center justify-between p-2 text-sm rounded-md transition-colors ${
+                      activeFilter === tab.id
+                        ? 'bg-purple-100 text-purple-600'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </div>
+                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Shelves */}
+          <div className="bg-white rounded-lg border p-4">
+            <h2 className="font-semibold text-gray-900 mb-3">Shelves</h2>
+            <div className="space-y-2">
+              <button
+                onClick={() => setSelectedShelf('')}
+                className={`w-full text-left p-2 text-sm rounded-md transition-colors ${
+                  !selectedShelf ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                All Shelves
+              </button>
+              {shelves.map(shelf => (
+                <button
+                  key={shelf.id}
+                  onClick={() => setSelectedShelf(shelf.id)}
+                  className={`w-full flex items-center justify-between p-2 text-sm rounded-md transition-colors ${
+                    selectedShelf === shelf.id
+                      ? 'bg-purple-100 text-purple-600'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span>{shelf.name}</span>
+                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
+                    {shelf.ficCount}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1">
+          {/* Search and Controls */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search fics..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="dateAdded">Date Added</option>
+              <option value="title">Title</option>
+              <option value="author">Author</option>
+              <option value="rating">Rating</option>
+              <option value="wordCount">Word Count</option>
+            </select>
+          </div>
+
+          {/* Results */}
+          <div className="mb-4">
+            <p className="text-sm text-gray-600">
+              {filteredFics.length} {filteredFics.length === 1 ? 'fic' : 'fics'} found
+            </p>
+          </div>
+
+          {/* Fics Grid/List */}
+          {filteredFics.length === 0 ? (
+            <div className="text-center py-12">
+              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No fics found</h3>
+              <p className="text-gray-600">Try adjusting your filters or search terms</p>
+            </div>
+          ) : (
+            <div className={
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'
+                : 'space-y-4'
+            }>
+              {filteredFics.map(fic => 
+                viewMode === 'grid' ? (
+                  <FicCard key={fic.id} fic={fic} />
+                ) : (
+                  <FicListItem key={fic.id} fic={fic} />
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LibraryPage;
