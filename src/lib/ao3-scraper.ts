@@ -136,7 +136,15 @@ export class AO3Scraper {
         'input[value="Submit"]',
         'button[type="submit"]',
         '.btn-primary',
-        '.btn-submit'
+        '.btn-submit',
+        // AO3 specific selectors
+        'input[name="commit"]',
+        'input[value="Log In"]',
+        'input[value="Sign In"]',
+        'input[value="Submit"]',
+        'button[name="commit"]',
+        'input[type="submit"][value="Log In"]',
+        'input[type="submit"][value="Sign In"]'
       ]
       
       for (const selector of submitSelectors) {
@@ -201,6 +209,32 @@ export class AO3Scraper {
           }
         } catch (e) {
           console.log('AO3 Scraper: Button clicking failed')
+        }
+      }
+      
+      // Method 5: Try to find and submit the login form directly
+      if (!submitted) {
+        try {
+          const formSubmitted = await this.page.evaluate(() => {
+            // Look for the login form specifically
+            const loginForm = (document.querySelector('form[action*="login"]') || 
+                           document.querySelector('form[action*="session"]') ||
+                           document.querySelector('form')) as HTMLFormElement
+            
+            if (loginForm) {
+              console.log('AO3 Scraper: Found login form, submitting...')
+              loginForm.submit()
+              return true
+            }
+            return false
+          })
+          
+          if (formSubmitted) {
+            console.log('AO3 Scraper: Submitted login form directly')
+            submitted = true
+          }
+        } catch (e) {
+          console.log('AO3 Scraper: Direct form submission failed:', e instanceof Error ? e.message : 'Unknown error')
         }
       }
       
