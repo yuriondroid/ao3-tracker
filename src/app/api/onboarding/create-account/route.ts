@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Create user in Supabase database
-    const { data: dbUser, error: dbError } = await supabase
+    let { data: dbUser, error: dbError } = await supabase
       .from('users')
       .insert({
         email: email,
@@ -46,15 +46,43 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (dbError && !dbError.message.includes('duplicate key')) {
-      console.log('Onboarding API: Failed to create user in database:', dbError)
+    if (dbError) {
+      if (dbError.message.includes('duplicate key')) {
+        console.log('Onboarding API: User already exists in database, fetching existing user')
+        // User already exists, fetch the existing user
+        const { data: existingUser, error: fetchError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('ao3_username', ao3Username)
+          .single()
+        
+        if (fetchError) {
+          console.log('Onboarding API: Failed to fetch existing user:', fetchError)
+          return NextResponse.json({ 
+            success: false, 
+            error: 'Failed to fetch existing user: ' + fetchError.message 
+          }, { status: 500 })
+        }
+        
+        dbUser = existingUser
+      } else {
+        console.log('Onboarding API: Failed to create user in database:', dbError)
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Failed to create user in database: ' + dbError.message 
+        }, { status: 500 })
+      }
+    }
+
+    if (!dbUser) {
+      console.log('Onboarding API: No user data available')
       return NextResponse.json({ 
         success: false, 
-        error: 'Failed to create user in database: ' + dbError.message 
+        error: 'Failed to create or fetch user in database' 
       }, { status: 500 })
     }
 
-    console.log('Onboarding API: User created in database:', ao3Username)
+    console.log('Onboarding API: User ready in database:', ao3Username)
 
     // Get user's actual reading history from AO3
     console.log('Onboarding API: Getting user history from AO3')

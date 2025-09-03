@@ -335,14 +335,27 @@ export class AO3Scraper {
     const works: AO3Work[] = []
 
     try {
-      // Try to get public works from user's profile first (no login required)
-      console.log('AO3 Scraper: Fetching public works from user profile...')
-      const publicWorks = await this.getPublicUserWorks(username)
-      works.push(...publicWorks)
+      // First, try to login and get private data
+      console.log('AO3 Scraper: Attempting login for private data...')
+      const sessionToken = await this.getA03SessionAdvanced(username, password)
+      
+      if (sessionToken) {
+        console.log('AO3 Scraper: Login successful, fetching private data...')
+        
+        // Get user's private data
+        const privateWorks = await this.getPrivateUserData(username, sessionToken)
+        works.push(...privateWorks)
+      } else {
+        console.log('AO3 Scraper: Login failed, trying public data...')
+        
+        // Fallback to public works
+        const publicWorks = await this.getPublicUserWorks(username)
+        works.push(...publicWorks)
+      }
 
-      // Try to get some popular works from AO3 homepage as fallback
+      // If still no works, get popular works as final fallback
       if (works.length === 0) {
-        console.log('AO3 Scraper: No public works found, getting popular works from homepage...')
+        console.log('AO3 Scraper: No works found, getting popular works from homepage...')
         const popularWorks = await this.getPopularWorks()
         works.push(...popularWorks)
       }
@@ -408,7 +421,216 @@ export class AO3Scraper {
     }
   }
 
-  // Get AO3 session token by logging in
+  // Get AO3 session token using advanced method to bypass anti-bot protection
+  private async getA03SessionAdvanced(username: string, password: string): Promise<string | null> {
+    try {
+      console.log('AO3 Scraper: Getting session token with advanced method...')
+      
+      // Step 1: Get the main page first to establish session
+      const mainPageResponse = await fetch('https://archiveofourown.org/', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
+        }
+      })
+
+      if (!mainPageResponse.ok) {
+        console.log('AO3 Scraper: Failed to get main page:', mainPageResponse.status)
+        return null
+      }
+
+      // Extract cookies from main page
+      const mainPageCookies = mainPageResponse.headers.get('set-cookie')
+      const cookieHeader = mainPageCookies ? mainPageCookies.split(';')[0] : ''
+      
+      // Step 2: Get the login page with proper headers
+      const loginPageResponse = await fetch('https://archiveofourown.org/users/login', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Referer': 'https://archiveofourown.org/',
+          'Cookie': cookieHeader
+        }
+      })
+
+      if (!loginPageResponse.ok) {
+        console.log('AO3 Scraper: Failed to get login page:', loginPageResponse.status)
+        return null
+      }
+
+      const loginPageHtml = await loginPageResponse.text()
+      const $ = cheerio.load(loginPageHtml)
+      
+      // Extract CSRF token
+      const csrfToken = $('input[name="authenticity_token"]').attr('value')
+      console.log('AO3 Scraper: CSRF token found:', csrfToken ? 'yes' : 'no')
+      
+      // Get all cookies from login page
+      const loginPageCookies = loginPageResponse.headers.get('set-cookie')
+      const allCookies = [cookieHeader, loginPageCookies].filter(Boolean).join('; ')
+      
+      // Step 3: Submit login with proper timing and headers
+      await new Promise(resolve => setTimeout(resolve, 1000)) // Add delay to seem more human
+      
+      const loginData = new URLSearchParams({
+        'user[login]': username,
+        'user[password]': password,
+        'commit': 'Log In',
+        'authenticity_token': csrfToken || ''
+      })
+      
+      const response = await fetch('https://archiveofourown.org/users/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Referer': 'https://archiveofourown.org/users/login',
+          'Origin': 'https://archiveofourown.org',
+          'Cookie': allCookies
+        },
+        body: loginData
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Login failed with status:', response.status)
+        return null
+      }
+
+      // Check if login was successful
+      const responseText = await response.text()
+      if (responseText.includes(`/users/${username}`) || responseText.includes('Logout') || responseText.includes('Sign out')) {
+        console.log('AO3 Scraper: Login successful!')
+        
+        // Extract session token from cookies
+        const responseCookies = response.headers.get('set-cookie')
+        if (responseCookies) {
+          const sessionMatch = responseCookies.match(/_otwarchive_session=([^;]+)/)
+          if (sessionMatch) {
+            return sessionMatch[1]
+          }
+        }
+        return 'authenticated'
+      }
+
+      console.log('AO3 Scraper: Login failed - no success indicators found')
+      return null
+    } catch (error) {
+      console.error('AO3 Scraper: Error getting session:', error)
+      return null
+    }
+  }
+
+  // Get private user data (requires login)
+  private async getPrivateUserData(username: string, sessionToken: string): Promise<AO3Work[]> {
+    const works: AO3Work[] = []
+    
+    try {
+      // Get user's readings (private)
+      console.log('AO3 Scraper: Fetching private readings...')
+      const readings = await this.getPrivateReadings(username, sessionToken)
+      works.push(...readings)
+
+      // Get user's bookmarks (private)
+      console.log('AO3 Scraper: Fetching private bookmarks...')
+      const bookmarks = await this.getPrivateBookmarks(username, sessionToken)
+      bookmarks.forEach(work => work.status = 'bookmarked')
+      works.push(...bookmarks)
+
+      // Get user's marked for later (private)
+      console.log('AO3 Scraper: Fetching private marked for later...')
+      const markedForLater = await this.getPrivateMarkedForLater(username, sessionToken)
+      markedForLater.forEach(work => work.status = 'marked_for_later')
+      works.push(...markedForLater)
+
+      return works
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching private data:', error)
+      return []
+    }
+  }
+
+  // Get private readings
+  private async getPrivateReadings(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      const response = await fetch(`https://archiveofourown.org/users/${username}/readings`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch readings:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching readings:', error)
+      return []
+    }
+  }
+
+  // Get private bookmarks
+  private async getPrivateBookmarks(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      const response = await fetch(`https://archiveofourown.org/users/${username}/bookmarks`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch bookmarks:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching bookmarks:', error)
+      return []
+    }
+  }
+
+  // Get private marked for later
+  private async getPrivateMarkedForLater(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      const response = await fetch(`https://archiveofourown.org/users/${username}/marked_for_later`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch marked for later:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching marked for later:', error)
+      return []
+    }
+  }
+
+  // Get AO3 session token by logging in (old method)
   private async getA03Session(username: string, password: string): Promise<string | null> {
     try {
       console.log('AO3 Scraper: Getting session token...')
