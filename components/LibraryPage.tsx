@@ -156,114 +156,11 @@ const LibraryPage: React.FC = () => {
       setShelves(defaultShelves);
     }
   }, [fics]);
-    if (!user?.id) return;
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-
-    try {
-      // Fetch user's library entries with fanwork details
-      const { data: libraryEntries, error } = await supabase
-        .from('user_library')
-        .select(`
-          *,
-          fanworks (*)
-        `)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Failed to fetch library data:', error);
-        return;
-      }
-
-      if (libraryEntries && libraryEntries.length > 0) {
-        // Convert database entries to Fic format
-        const realFics = libraryEntries.map(entry => ({
-          id: entry.fanworks.ao3_work_id,
-          title: entry.fanworks.title,
-          author: entry.fanworks.author,
-          fandom: entry.fanworks.fandom,
-          relationship: entry.fanworks.relationship || 'No Relationship',
-          wordCount: entry.fanworks.word_count || 0,
-          chapters: `${entry.fanworks.chapters_published || 1}/${entry.fanworks.chapters_total || '?'}`,
-          status: entry.fanworks.status || 'Unknown',
-          rating: entry.fanworks.rating || 'NR',
-          userRating: entry.user_rating || 0,
-          readingStatus: entry.reading_status as any,
-          progress: entry.progress_percentage || 0,
-          dateAdded: entry.date_added?.split('T')[0] || new Date().toISOString().split('T')[0],
-          lastRead: entry.last_read?.split('T')[0] || new Date().toISOString().split('T')[0],
-          shelves: [], // TODO: Fetch shelves
-          tags: entry.fanworks.additional_tags || [],
-          summary: entry.fanworks.summary || 'No summary available',
-          url: `https://archiveofourown.org/works/${entry.fanworks.ao3_work_id}`
-        }));
-        setFics(realFics);
-      } else {
-        // Fallback to scraped works if no database entries
-        if (user?.scrapedWorks && user.scrapedWorks.length > 0) {
-          const realFics = convertScrapedWorksToFics(user.scrapedWorks);
-          setFics(realFics);
-        } else {
-          // Fallback to mock data
-          setFics([
-            {
-              id: '1',
-              title: 'The Art of Falling in Love',
-              author: 'SkillfulWriter',
-              fandom: 'Harry Potter',
-              relationship: 'Harry Potter/Draco Malfoy',
-              wordCount: 125000,
-              chapters: '15/15',
-              status: 'Complete',
-              rating: 'M',
-              userRating: 5,
-              readingStatus: 'completed',
-              progress: 100,
-              dateAdded: '2024-08-15',
-              lastRead: '2024-09-01',
-              shelves: ['1', '4'],
-              tags: ['Enemies to Lovers', 'Auror Harry', 'Healer Draco', 'Angst with Happy Ending'],
-              summary: 'When Harry and Draco are forced to work together on a case...',
-              url: 'https://archiveofourown.org/works/123456'
-            }
-          ]);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch library data:', error);
-      // Fallback to mock data
-      setFics([
-        {
-          id: '1',
-          title: 'The Art of Falling in Love',
-          author: 'SkillfulWriter',
-          fandom: 'Harry Potter',
-          relationship: 'Harry Potter/Draco Malfoy',
-          wordCount: 125000,
-          chapters: '15/15',
-          status: 'Complete',
-          rating: 'M',
-          userRating: 5,
-          readingStatus: 'completed',
-          progress: 100,
-          dateAdded: '2024-08-15',
-          lastRead: '2024-09-01',
-          shelves: ['1', '4'],
-          tags: ['Enemies to Lovers', 'Auror Harry', 'Healer Draco', 'Angst with Happy Ending'],
-          summary: 'When Harry and Draco are forced to work together on a case...',
-          url: 'https://archiveofourown.org/works/123456'
-        }
-      ]);
-    }
-  };
 
   // Update fics when user data changes
   React.useEffect(() => {
     if (user) {
-      fetchLibraryData();
+      // Library data is already fetched in the main useEffect
     }
   }, [user]);
 
