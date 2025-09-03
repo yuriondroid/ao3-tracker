@@ -40,11 +40,8 @@ export async function POST(request: NextRequest) {
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .insert({
-        id: ao3Username,
-        username: ao3Username,
-        display_name: displayName || ao3Username,
         email: email,
-        onboarding_completed: true
+        ao3_username: ao3Username
       })
       .select()
       .single()
@@ -79,7 +76,7 @@ export async function POST(request: NextRequest) {
     let savedCount = 0
     for (const work of userWorks) {
       try {
-        await scraper.saveWorkToDatabase(work, ao3Username)
+        await scraper.saveWorkToDatabase(work, dbUser.id)
         savedCount++
       } catch (error) {
         console.log('Onboarding API: Failed to save work:', work.title, error)
@@ -89,7 +86,7 @@ export async function POST(request: NextRequest) {
     console.log('Onboarding API: Saved', savedCount, 'works to database')
 
     // Create default shelves for the user
-    await scraper.createDefaultShelvesForUser(ao3Username)
+    await scraper.createDefaultShelvesForUser(dbUser.id)
 
     // Create new session for the user
     const sessionId = SimpleAuth.createSession(user)
@@ -99,7 +96,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       user: {
-        id: ao3Username,
+        id: dbUser.id,
         username: ao3Username,
         displayName: displayName || ao3Username,
         email: email,
