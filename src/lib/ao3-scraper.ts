@@ -331,124 +331,170 @@ export class AO3Scraper {
 
   // Get user's actual reading history from AO3
   async getUserHistory(username: string, password: string, scope: string = 'month'): Promise<AO3Work[]> {
-    await this.initialize()
+    console.log('AO3 Scraper: Getting real user history for:', username)
     const works: AO3Work[] = []
 
-    // Check if we're in serverless environment
-    const isServerless = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
-    
-    if (isServerless) {
-      console.log('AO3 Scraper: Serverless environment detected, returning sample works')
-      // Return sample works for serverless environment
-      return [
-        {
-          id: '12345',
-          title: 'Sample Work 1',
-          author: 'Sample Author',
-          fandoms: ['Sample Fandom'],
-          relationships: ['Sample Relationship'],
-          characters: ['Sample Character'],
-          additionalTags: ['sample', 'tag'],
-          rating: 'T',
-          warnings: ['No Archive Warnings Apply'],
-          categories: ['F/M'],
-          chaptersPublished: 1,
-          chaptersTotal: 1,
-          wordCount: 1000,
-          language: 'English',
-          publishedDate: new Date(),
-          updatedDate: new Date(),
-          summary: 'A sample work for testing',
-          kudos: 10,
-          comments: 2,
-          bookmarks: 5,
-          hits: 100,
-          status: 'completed',
-          url: 'https://archiveofourown.org/works/12345'
-        },
-        {
-          id: '67890',
-          title: 'Sample Work 2',
-          author: 'Another Author',
-          fandoms: ['Another Fandom'],
-          relationships: ['Another Relationship'],
-          characters: ['Another Character'],
-          additionalTags: ['another', 'tag'],
-          rating: 'G',
-          warnings: ['No Archive Warnings Apply'],
-          categories: ['Gen'],
-          chaptersPublished: 3,
-          chaptersTotal: 5,
-          wordCount: 5000,
-          language: 'English',
-          publishedDate: new Date(),
-          updatedDate: new Date(),
-          summary: 'Another sample work for testing',
-          kudos: 25,
-          comments: 5,
-          bookmarks: 12,
-          hits: 250,
-          status: 'in-progress',
-          url: 'https://archiveofourown.org/works/67890'
-        }
-      ]
-    }
-
     try {
-      // First authenticate and keep the session alive
-      const authResult = await this.authenticateWithCredentials(username, password, true)
-      if (!authResult.success) {
-        console.log('AO3 Scraper: Authentication failed:', authResult.error)
+      // First, get a session by logging in
+      const sessionToken = await this.getA03Session(username, password)
+      if (!sessionToken) {
+        console.log('AO3 Scraper: Failed to get session token')
         return []
       }
-      
-      console.log('AO3 Scraper: Authentication successful, now scraping user history')
-      
-      // Get user's history page
-      console.log('AO3 Scraper: Accessing readings page...')
-      await this.page.goto(`https://archiveofourown.org/users/${username}/readings`, { waitUntil: 'networkidle2' })
-      
-      const html = await this.page.content()
-      const $ = cheerio.load(html)
-      
-      // Check if we got redirected to login (private readings)
-      if (this.page.url().includes('/login')) {
-        console.log('AO3 Scraper: Readings page is private, trying public works...')
-        // Try to get some public works instead
-        await this.page.goto('https://archiveofourown.org/works', { waitUntil: 'networkidle2' })
-        const publicHtml = await this.page.content()
-        const $public = cheerio.load(publicHtml)
-        
-        $public('.work.blurb').slice(0, 5).each((_, element) => {
-          const work = this.parseWorkElement($public, element)
-          if (work) {
-            works.push(work)
-          }
-        })
-        
-        console.log('AO3 Scraper: Found', works.length, 'public works as fallback')
-      } else {
-        // Get works from history
-        $('.work.blurb').each((_, element) => {
-          const work = this.parseWorkElement($, element)
-          if (work) {
-            works.push(work)
-          }
-        })
-        
-        console.log('AO3 Scraper: Found', works.length, 'works in readings history')
-      }
-      
-      // Skip bookmarks and marked for later for now (they're usually private)
-      console.log('AO3 Scraper: Skipping bookmarks and marked for later (private pages)')
+
+      console.log('AO3 Scraper: Got session token, fetching user data...')
+
+      // Get user's works from their profile
+      const userWorks = await this.getUserWorks(username, sessionToken)
+      works.push(...userWorks)
+
+      // Get user's bookmarks
+      const bookmarks = await this.getUserBookmarks(username, sessionToken)
+      bookmarks.forEach(work => work.status = 'bookmarked')
+      works.push(...bookmarks)
+
+      // Get user's marked for later
+      const markedForLater = await this.getUserMarkedForLater(username, sessionToken)
+      markedForLater.forEach(work => work.status = 'marked_for_later')
+      works.push(...markedForLater)
+
       console.log('AO3 Scraper: Successfully scraped', works.length, 'works from user history')
       return works
     } catch (error) {
-      console.error('Error getting user history:', error)
+      console.error('AO3 Scraper: Error getting user history:', error)
       return []
-    } finally {
-      await this.cleanup()
     }
+  }
+
+  // Get AO3 session token by logging in
+  private async getA03Session(username: string, password: string): Promise<string | null> {
+    try {
+      console.log('AO3 Scraper: Getting session token...')
+      
+      const response = await fetch('https://archiveofourown.org/users/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: new URLSearchParams({
+          'user[login]': username,
+          'user[password]': password,
+          'commit': 'Log In'
+        })
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Login failed with status:', response.status)
+        return null
+      }
+
+      // Extract session token from cookies
+      const setCookieHeader = response.headers.get('set-cookie')
+      if (setCookieHeader) {
+        const sessionMatch = setCookieHeader.match(/_otwarchive_session=([^;]+)/)
+        if (sessionMatch) {
+          console.log('AO3 Scraper: Got session token')
+          return sessionMatch[1]
+        }
+      }
+
+      console.log('AO3 Scraper: No session token found in response')
+      return null
+    } catch (error) {
+      console.error('AO3 Scraper: Error getting session:', error)
+      return null
+    }
+  }
+
+  // Get user's works from their profile
+  private async getUserWorks(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      console.log('AO3 Scraper: Fetching user works...')
+      
+      const response = await fetch(`https://archiveofourown.org/users/${username}/works`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch user works:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching user works:', error)
+      return []
+    }
+  }
+
+  // Get user's bookmarks
+  private async getUserBookmarks(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      console.log('AO3 Scraper: Fetching user bookmarks...')
+      
+      const response = await fetch(`https://archiveofourown.org/users/${username}/bookmarks`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch bookmarks:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching bookmarks:', error)
+      return []
+    }
+  }
+
+  // Get user's marked for later
+  private async getUserMarkedForLater(username: string, sessionToken: string): Promise<AO3Work[]> {
+    try {
+      console.log('AO3 Scraper: Fetching marked for later...')
+      
+      const response = await fetch(`https://archiveofourown.org/users/${username}/marked_for_later`, {
+        headers: {
+          'Cookie': `_otwarchive_session=${sessionToken}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      })
+
+      if (!response.ok) {
+        console.log('AO3 Scraper: Failed to fetch marked for later:', response.status)
+        return []
+      }
+
+      const html = await response.text()
+      return this.parseWorksFromHTML(html)
+    } catch (error) {
+      console.error('AO3 Scraper: Error fetching marked for later:', error)
+      return []
+    }
+  }
+
+  // Parse works from HTML content
+  private parseWorksFromHTML(html: string): AO3Work[] {
+    const works: AO3Work[] = []
+    const $ = cheerio.load(html)
+    
+    $('.work.blurb').each((_, element) => {
+      const work = this.parseWorkElement($, element)
+      if (work) {
+        works.push(work)
+      }
+    })
+    
+    return works
   }
 
   // Helper method to parse work elements
