@@ -121,7 +121,8 @@ export async function POST(request: NextRequest) {
 
     console.log('Onboarding API: Account created successfully for:', ao3Username)
 
-    return NextResponse.json({
+    // Create response with session cookie
+    const response = NextResponse.json({
       success: true,
       user: {
         id: dbUser.id,
@@ -136,11 +137,35 @@ export async function POST(request: NextRequest) {
       works: userWorks
     })
 
+    // Set session cookie
+    response.cookies.set('sessionId', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7 // 7 days
+    })
+
+    return response
+
   } catch (error) {
     console.error('Onboarding API: Error:', error)
+    
+    // Ensure we always return valid JSON
+    let errorMessage = 'Unknown error occurred'
+    if (error instanceof Error) {
+      errorMessage = error.message
+    } else if (typeof error === 'string') {
+      errorMessage = error
+    }
+    
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to create account: ' + (error instanceof Error ? error.message : 'Unknown error') 
-    }, { status: 500 })
+      error: 'Failed to create account: ' + errorMessage
+    }, { 
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
   }
 }

@@ -414,7 +414,7 @@ export class AO3Scraper {
 
       const html = await response.text()
       const works = this.parseWorksFromHTML(html)
-      return works.slice(0, 10) // Return first 10 works
+              return works // Return ALL works
     } catch (error) {
       console.error('AO3 Scraper: Error fetching popular works:', error)
       return []
