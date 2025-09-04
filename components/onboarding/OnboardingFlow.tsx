@@ -385,12 +385,45 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       setImportProgress(0);
 
       try {
+        // Debug: Log the data being sent
+        console.log('Onboarding data being sent:', {
+          ...formData,
+          importData: {
+            bookmarks: parsedData.bookmarks,
+            history: parsedData.history,
+            markedForLater: parsedData.markedForLater
+          }
+        });
+
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          setImportProgress(prev => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return prev;
+            }
+            return prev + 10;
+          });
+        }, 500);
+
         // Call the parent's onComplete with the form data
         if (onComplete) {
-          onComplete(formData);
+          await onComplete({
+            ...formData,
+            importData: {
+              bookmarks: parsedData.bookmarks,
+              history: parsedData.history,
+              markedForLater: parsedData.markedForLater
+            }
+          });
         }
+
+        // Complete the progress
+        clearInterval(progressInterval);
+        setImportProgress(100);
       } catch (error) {
         setImporting(false);
+        setImportProgress(0);
         console.error('Onboarding error:', error);
         alert('Onboarding failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
       }
