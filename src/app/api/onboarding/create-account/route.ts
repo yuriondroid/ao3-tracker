@@ -10,7 +10,6 @@ const supabase = createClient(
 );
 
 export async function POST(request: NextRequest) {
-  // Add global error handler
   const handleError = (error: any, context: string) => {
     console.error(`Onboarding API: ${context} error:`, error);
     return NextResponse.json({ 
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
     
     const { email, username, password, displayName, importData } = requestData;
     
-    console.log('Onboarding API: Received data:', {
+    console.log('Onboarding API: Received multi-file import data:', {
       email,
       username,
       displayName,
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest) {
       ao3Username: username
     };
 
-    // Store user in SimpleAuth (users Map)
+    // Store user in SimpleAuth
     const users = (SimpleAuth as any).users || new Map();
     users.set(username, user);
     console.log('Onboarding API: User created in SimpleAuth:', username);
@@ -69,22 +68,21 @@ export async function POST(request: NextRequest) {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user in database (using current schema)
+    // Create user in database
     let { data: dbUser, error: dbError } = await supabase
       .from('users')
       .insert({
         id: user.id,
         email,
-        ao3_username: username, // Use current schema field
-        ao3_session_token: 'temp_token' // Temporary token
+        ao3_username: username,
+        ao3_session_token: 'temp_token'
       })
       .select()
       .single();
 
     if (dbError) {
-      // If user already exists, fetch the existing user
-      if (dbError.code === '23505') { // Unique constraint violation
-        console.log('Onboarding API: User already exists in database, fetching existing user');
+      if (dbError.code === '23505') {
+        console.log('Onboarding API: User already exists, fetching existing user');
         const { data: existingUser, error: fetchError } = await supabase
           .from('users')
           .select()
@@ -94,7 +92,6 @@ export async function POST(request: NextRequest) {
         if (fetchError) {
           return handleError(fetchError, 'Failed to fetch existing user');
         }
-
         dbUser = existingUser;
       } else {
         return handleError(dbError, 'Failed to create user in database');
@@ -103,16 +100,16 @@ export async function POST(request: NextRequest) {
 
     console.log('Onboarding API: User ready in database:', username);
 
-    // Process and combine all imported works
+    // Process multi-file import data
     const allWorks: any[] = [];
     
-    console.log('Onboarding API: Starting multi-file import processing');
+    console.log('Onboarding API: Processing multi-file import data');
     
-    // Add bookmarks (set status based on source)
-    if (importData?.bookmarks) {
+    // Process bookmarks
+    if (importData?.bookmarks && importData.bookmarks.length > 0) {
+      console.log('Onboarding API: Processing', importData.bookmarks.length, 'bookmarks');
       allWorks.push(...importData.bookmarks.map((work: any) => ({
-        // Fanwork data
-        id: uuidv4(), // Generate new UUID for fanwork
+        id: uuidv4(),
         ao3_work_id: work.id,
         title: work.title,
         author: work.author,
@@ -139,7 +136,7 @@ export async function POST(request: NextRequest) {
         // User library data
         user_id: dbUser.id,
         reading_status: 'want-to-read',
-        user_rating: 0,
+        user_rating: null,
         progress_percentage: 0,
         current_chapter: 1,
         date_added: new Date().toISOString(),
@@ -150,11 +147,11 @@ export async function POST(request: NextRequest) {
       })));
     }
 
-    // Add history works (set as completed)
-    if (importData?.history) {
+    // Process history
+    if (importData?.history && importData.history.length > 0) {
+      console.log('Onboarding API: Processing', importData.history.length, 'history works');
       allWorks.push(...importData.history.map((work: any) => ({
-        // Fanwork data
-        id: uuidv4(), // Generate new UUID for fanwork
+        id: uuidv4(),
         ao3_work_id: work.id,
         title: work.title,
         author: work.author,
@@ -181,7 +178,7 @@ export async function POST(request: NextRequest) {
         // User library data
         user_id: dbUser.id,
         reading_status: 'completed',
-        user_rating: 0,
+        user_rating: null,
         progress_percentage: 100,
         current_chapter: parseInt(work.chapters?.split('/')[1]) || 1,
         date_added: new Date().toISOString(),
@@ -192,11 +189,11 @@ export async function POST(request: NextRequest) {
       })));
     }
 
-    // Add marked for later works
-    if (importData?.markedForLater) {
+    // Process marked for later
+    if (importData?.markedForLater && importData.markedForLater.length > 0) {
+      console.log('Onboarding API: Processing', importData.markedForLater.length, 'marked for later works');
       allWorks.push(...importData.markedForLater.map((work: any) => ({
-        // Fanwork data
-        id: uuidv4(), // Generate new UUID for fanwork
+        id: uuidv4(),
         ao3_work_id: work.id,
         title: work.title,
         author: work.author,
@@ -223,7 +220,7 @@ export async function POST(request: NextRequest) {
         // User library data
         user_id: dbUser.id,
         reading_status: 'to-read',
-        user_rating: 0,
+        user_rating: null,
         progress_percentage: 0,
         current_chapter: 1,
         date_added: new Date().toISOString(),
@@ -234,15 +231,15 @@ export async function POST(request: NextRequest) {
       })));
     }
 
-    // Remove duplicates based on work ID
+    // Remove duplicates based on AO3 work ID
     const uniqueWorks = allWorks.reduce((acc: any[], current: any) => {
-      const existing = acc.find((work: any) => work.id === current.id);
+      const existing = acc.find((work: any) => work.ao3_work_id === current.ao3_work_id);
       if (!existing) {
         acc.push(current);
       } else {
-        // If duplicate, prefer the one with more complete data or higher priority status
+        // If duplicate, prefer the one with higher priority status
         const statusPriority: Record<string, number> = { 'completed': 3, 'reading': 2, 'want-to-read': 1, 'to-read': 0 };
-        if (statusPriority[current.status] > statusPriority[existing.status]) {
+        if (statusPriority[current.reading_status] > statusPriority[existing.reading_status]) {
           const index = acc.indexOf(existing);
           acc[index] = current;
         }
@@ -252,23 +249,22 @@ export async function POST(request: NextRequest) {
 
     console.log('Onboarding API: Processing', uniqueWorks.length, 'unique works from multi-file import');
 
-    // Double-check that dbUser exists and has an id
     if (!dbUser || !dbUser.id) {
-      console.log('Onboarding API: dbUser is null or missing id, cannot save works');
+      console.log('Onboarding API: dbUser is null or missing id');
       return NextResponse.json({ 
         success: false, 
-        error: 'Database user not properly created. Please try again.' 
+        error: 'Database user not properly created' 
       }, { status: 500 });
     }
 
-    // Insert works in batches to avoid overwhelming the database
+    // Save works to database
     const batchSize = 50;
     let processedCount = 0;
 
     for (let i = 0; i < uniqueWorks.length; i += batchSize) {
       const batch = uniqueWorks.slice(i, i + batchSize);
       
-      // Split each work into fanwork and library data
+      // Split into fanwork and library data
       const fanworksBatch = batch.map(work => ({
         id: work.id,
         ao3_work_id: work.ao3_work_id,
@@ -332,18 +328,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('Onboarding API: Saved', processedCount, 'works to database');
+    console.log('Onboarding API: Saved', processedCount, 'works to database via multi-file import');
 
-    // Create default shelves for the user
+    // Create default shelves
     try {
       await supabase.rpc('create_default_shelves_for_user', { user_uuid: dbUser.id });
       console.log('Onboarding API: Created default shelves for user');
     } catch (error) {
       console.log('Onboarding API: Failed to create default shelves:', error);
-      // Continue anyway, shelves are not critical
     }
 
-    // Create new session for the user
+    // Create session
     let sessionId;
     try {
       sessionId = SimpleAuth.createSession(user);
@@ -353,15 +348,9 @@ export async function POST(request: NextRequest) {
       sessionId = `session_${username}_${Date.now()}`;
     }
 
-    // Mark user onboarding as completed (skip for now since column doesn't exist)
-    // await supabase
-    //   .from('users')
-    //   .update({ onboarding_completed: true })
-    //   .eq('id', dbUser.id);
+    console.log('Onboarding API: Multi-file import completed successfully for:', username);
 
-    console.log('Onboarding API: Account created successfully for:', username);
-
-    // Create response with session cookie
+    // Create response
     try {
       const response = NextResponse.json({
         success: true,
@@ -378,12 +367,11 @@ export async function POST(request: NextRequest) {
         message: `Successfully imported ${processedCount} unique works from your AO3 data!`
       });
 
-      // Set session cookie
       response.cookies.set('sessionId', sessionId, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7 // 7 days
+        maxAge: 60 * 60 * 24 * 7
       });
 
       return response;

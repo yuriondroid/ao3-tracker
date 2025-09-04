@@ -39,7 +39,7 @@ interface Fic {
   url: string;
   status: 'to-read' | 'reading' | 'completed' | 'dropped' | 'want-to-read';
   progress: number;
-  user_rating: number;
+  user_rating: number | null;
   user_notes: string;
   date_added: string;
   date_started: string;
@@ -112,7 +112,7 @@ const LibraryPage: React.FC = () => {
               url: `https://archiveofourown.org/works/${entry.fanworks?.ao3_work_id || entry.fanwork_id}`,
               status: entry.reading_status || 'to-read',
               progress: entry.progress_percentage || 0,
-              user_rating: entry.user_rating || 0,
+              user_rating: entry.user_rating || null,
               user_notes: entry.private_notes || '',
               date_added: entry.date_added ? new Date(entry.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
               date_started: entry.date_started ? new Date(entry.date_started).toISOString().split('T')[0] : '',
@@ -262,7 +262,7 @@ const LibraryPage: React.FC = () => {
         )}
 
         <div className="flex justify-between items-center">
-          <StarRating rating={fic.user_rating} />
+          <StarRating rating={fic.user_rating || 0} />
           <div className="flex gap-1">
             <span
               className={`text-xs px-2 py-1 rounded-full ${
@@ -340,7 +340,7 @@ const LibraryPage: React.FC = () => {
           )}
 
           <div className="flex items-center justify-between">
-            <StarRating rating={fic.user_rating} />
+            <StarRating rating={fic.user_rating || 0} />
             <div className="flex gap-1">
               <span
                 className={`text-xs px-2 py-1 rounded-full ${
