@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user from session
-    const user = SimpleAuth.getUserFromSession(sessionId);
+    const user = await SimpleAuth.getUserFromSession(sessionId);
     
     if (!user) {
       return NextResponse.json({ 

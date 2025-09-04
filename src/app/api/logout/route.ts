@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const sessionId = request.cookies.get('sessionId')?.value
     
     if (sessionId) {
-      SimpleAuth.logout(sessionId)
+      await SimpleAuth.logout(sessionId)
       console.log('Logout API: Logged out session:', sessionId)
     }
     

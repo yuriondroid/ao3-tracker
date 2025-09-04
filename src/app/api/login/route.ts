@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const user = await SimpleAuth.authenticate(username, password)
     
     if (user) {
-      const sessionId = SimpleAuth.createSession(user)
+      const sessionId = await SimpleAuth.createSession(user)
       
       const response = NextResponse.json({ 
         success: true, 
