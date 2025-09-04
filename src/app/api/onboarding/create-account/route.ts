@@ -31,6 +31,17 @@ export async function POST(request: NextRequest) {
     }
     
     const { email, username, password, displayName, importData } = requestData;
+    
+    console.log('Onboarding API: Received data:', {
+      email,
+      username,
+      displayName,
+      hasImportData: !!importData,
+      importDataKeys: importData ? Object.keys(importData) : [],
+      bookmarksCount: importData?.bookmarks?.length || 0,
+      historyCount: importData?.history?.length || 0,
+      markedForLaterCount: importData?.markedForLater?.length || 0
+    });
 
     // Validate required fields
     if (!email || !username || !password || !displayName) {
@@ -94,6 +105,8 @@ export async function POST(request: NextRequest) {
 
     // Process and combine all imported works
     const allWorks: any[] = [];
+    
+    console.log('Onboarding API: Starting multi-file import processing');
     
     // Add bookmarks (set status based on source)
     if (importData?.bookmarks) {
@@ -237,7 +250,7 @@ export async function POST(request: NextRequest) {
       return acc;
     }, [] as any[]);
 
-    console.log('Onboarding API: Processing', uniqueWorks.length, 'unique works');
+    console.log('Onboarding API: Processing', uniqueWorks.length, 'unique works from multi-file import');
 
     // Double-check that dbUser exists and has an id
     if (!dbUser || !dbUser.id) {
