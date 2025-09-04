@@ -305,6 +305,8 @@ export async function POST(request: NextRequest) {
         private_notes: work.private_notes
       }));
 
+      console.log('Onboarding API: Library batch sample:', libraryBatch[0]);
+
       // Insert fanworks
       const { error: fanworksError } = await supabase
         .from('fanworks')
