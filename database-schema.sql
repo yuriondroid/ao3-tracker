@@ -1,52 +1,62 @@
--- AO3 Tracker Database Schema
--- Updated for multi-file import system
+-- AO3 Tracker Database Schema for Supabase
+-- Run this in your Supabase SQL editor to replace the existing schema
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Drop existing tables if they exist (be careful with this in production!)
+DROP TABLE IF EXISTS reading_sessions CASCADE;
+DROP TABLE IF EXISTS shelf_items CASCADE;
+DROP TABLE IF EXISTS user_shelves CASCADE;
+DROP TABLE IF EXISTS user_library CASCADE;
+DROP TABLE IF EXISTS fanworks CASCADE;
+DROP TABLE IF EXISTS user_preferences CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- Users table
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
+  password TEXT NOT NULL, -- Hashed password
   display_name TEXT NOT NULL,
   onboarding_completed BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- User preferences table
-CREATE TABLE IF NOT EXISTS user_preferences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- User preferences
+CREATE TABLE user_preferences (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  theme TEXT DEFAULT 'light',
-  notifications_enabled BOOLEAN DEFAULT true,
-  auto_sync BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  blocked_fandoms TEXT[] DEFAULT '{}',
+  blocked_tags TEXT[] DEFAULT '{}',
+  blocked_ratings TEXT[] DEFAULT '{}',
+  blocked_warnings TEXT[] DEFAULT '{}',
+  preferred_ratings TEXT[] DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Fanworks table (main works table)
-CREATE TABLE IF NOT EXISTS works (
+-- Works table (consolidated from fanworks + user_library)
+CREATE TABLE works (
   id TEXT PRIMARY KEY, -- AO3 work ID
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  author TEXT,
+  author TEXT NOT NULL,
   author_url TEXT,
-  fandom TEXT[],
-  relationship TEXT[],
-  characters TEXT[],
-  additional_tags TEXT[],
+  fandom TEXT[] DEFAULT '{}',
+  relationship TEXT[] DEFAULT '{}',
+  characters TEXT[] DEFAULT '{}',
+  additional_tags TEXT[] DEFAULT '{}',
   rating TEXT,
-  warnings TEXT[],
-  categories TEXT[],
-  chapters_current INTEGER,
-  chapters_total INTEGER,
-  words INTEGER,
-  kudos INTEGER,
-  hits INTEGER,
-  bookmarks INTEGER,
-  comments INTEGER,
-  published_date DATE,
-  updated_date DATE,
+  warnings TEXT[] DEFAULT '{}',
+  categories TEXT[] DEFAULT '{}',
+  chapters_current INTEGER DEFAULT 1,
+  chapters_total INTEGER DEFAULT 1,
+  words INTEGER DEFAULT 0,
+  language TEXT DEFAULT 'English',
+  published_date TIMESTAMP,
+  updated_date TIMESTAMP,
   summary TEXT,
   url TEXT,
   status TEXT DEFAULT 'to-read', -- 'reading', 'completed', 'dropped', 'to-read', 'want-to-read'
@@ -65,7 +75,7 @@ CREATE TABLE IF NOT EXISTS works (
 );
 
 -- Shelves table for custom organization
-CREATE TABLE IF NOT EXISTS shelves (
+CREATE TABLE shelves (
   id TEXT PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -75,7 +85,7 @@ CREATE TABLE IF NOT EXISTS shelves (
 );
 
 -- Reading sessions for tracking progress
-CREATE TABLE IF NOT EXISTS reading_sessions (
+CREATE TABLE reading_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   work_id TEXT REFERENCES works(id) ON DELETE CASCADE,
@@ -87,7 +97,7 @@ CREATE TABLE IF NOT EXISTS reading_sessions (
 );
 
 -- Import jobs for tracking import progress
-CREATE TABLE IF NOT EXISTS import_jobs (
+CREATE TABLE import_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'importing_works', 'completed', 'failed'
@@ -147,15 +157,13 @@ CREATE POLICY "Users can update own import jobs" ON import_jobs FOR UPDATE USING
 
 -- Indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_works_user_id ON works(user_id);
-CREATE INDEX IF NOT EXISTS idx_works_status ON works(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_works_source ON works(user_id, source);
-CREATE INDEX IF NOT EXISTS idx_works_date_added ON works(user_id, date_added DESC);
+CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
+CREATE INDEX IF NOT EXISTS idx_works_date_added ON works(date_added);
 CREATE INDEX IF NOT EXISTS idx_shelves_user_id ON shelves(user_id);
 CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_id ON reading_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_reading_sessions_work_id ON reading_sessions(work_id);
 CREATE INDEX IF NOT EXISTS idx_import_jobs_user_id ON import_jobs(user_id);
 
--- Triggers for updated_at timestamps
+-- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -164,5 +172,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Create trigger for users table
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
