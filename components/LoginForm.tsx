@@ -47,7 +47,7 @@ export default function LoginForm({ onLogin }: { onLogin: (user: any) => void })
           Sign in to FicTracker
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Use your AO3 credentials to access your fanfiction library
+          Create an account to access your fanfiction library
         </p>
       </div>
 
@@ -134,8 +134,8 @@ export default function LoginForm({ onLogin }: { onLogin: (user: any) => void })
 
             <div className="mt-6 text-center">
               <p className="text-xs text-gray-500">
-                Your AO3 credentials are only used for authentication and are not stored. 
-                We use a secure session token to access your bookmarks and reading data.
+                Your account information is securely stored and protected.
+                We use secure authentication to protect your data.
               </p>
             </div>
           </div>

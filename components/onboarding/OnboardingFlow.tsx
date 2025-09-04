@@ -58,25 +58,37 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
   const parseBookmarksHTML = (htmlContent: string) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
-    const bookmarks = doc.querySelectorAll('.bookmark');
+    
+    // Try different selectors for bookmarks
+    let bookmarks = doc.querySelectorAll('.bookmark');
+    if (bookmarks.length === 0) {
+      bookmarks = doc.querySelectorAll('.work.blurb');
+    }
+    if (bookmarks.length === 0) {
+      bookmarks = doc.querySelectorAll('.work');
+    }
+    if (bookmarks.length === 0) {
+      bookmarks = doc.querySelectorAll('[class*="bookmark"]');
+    }
     
     return Array.from(bookmarks).map(bookmark => {
-      const titleEl = bookmark.querySelector('h4 a');
-      const authorEl = bookmark.querySelector('.authors a');
-      const fandomsEl = bookmark.querySelectorAll('.fandoms a');
-      const ratingEl = bookmark.querySelector('.rating .text');
-      const warningsEl = bookmark.querySelectorAll('.warnings .text');
-      const categoriesEl = bookmark.querySelectorAll('.category .text');
-      const relationshipsEl = bookmark.querySelectorAll('.relationships a');
-      const charactersEl = bookmark.querySelectorAll('.characters a');
-      const tagsEl = bookmark.querySelectorAll('.freeforms a');
-      const wordsEl = bookmark.querySelector('.words');
-      const chaptersEl = bookmark.querySelector('.chapters');
-      const kudosEl = bookmark.querySelector('.kudos');
-      const hitsEl = bookmark.querySelector('.hits');
-      const bookmarkCountEl = bookmark.querySelector('.bookmarks');
-      const summaryEl = bookmark.querySelector('.summary blockquote');
-      const dateEl = bookmark.querySelector('.datetime');
+      // Try multiple selectors for each field
+      const titleEl = bookmark.querySelector('h4 a, .heading a, .title a, a[href*="/works/"]');
+      const authorEl = bookmark.querySelector('.authors a, .byline a, .author a');
+      const fandomsEl = bookmark.querySelectorAll('.fandoms a, .fandom a, [class*="fandom"] a');
+      const ratingEl = bookmark.querySelector('.rating .text, .rating, [class*="rating"]');
+      const warningsEl = bookmark.querySelectorAll('.warnings .text, .warning, [class*="warning"]');
+      const categoriesEl = bookmark.querySelectorAll('.category .text, .category, [class*="category"]');
+      const relationshipsEl = bookmark.querySelectorAll('.relationships a, .relationship a, [class*="relationship"] a');
+      const charactersEl = bookmark.querySelectorAll('.characters a, .character a, [class*="character"] a');
+      const tagsEl = bookmark.querySelectorAll('.freeforms a, .tag a, [class*="tag"] a');
+      const wordsEl = bookmark.querySelector('.words, [class*="word"]');
+      const chaptersEl = bookmark.querySelector('.chapters, [class*="chapter"]');
+      const kudosEl = bookmark.querySelector('.kudos, [class*="kudo"]');
+      const hitsEl = bookmark.querySelector('.hits, [class*="hit"]');
+      const bookmarkCountEl = bookmark.querySelector('.bookmarks, [class*="bookmark"]');
+      const summaryEl = bookmark.querySelector('.summary blockquote, .summary, [class*="summary"]');
+      const dateEl = bookmark.querySelector('.datetime, .date, [class*="date"]');
       
       const workId = titleEl?.getAttribute('href')?.match(/\/works\/(\d+)/)?.[1] || '';
       
@@ -420,12 +432,15 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
                 </div>
                 
                 <div>
-                  <h4 className="font-medium mb-2 text-blue-700">2. Export Your Data</h4>
-                  <ul className="text-sm text-blue-600 space-y-1">
-                    <li>• <strong>Bookmarks:</strong> Save your bookmarks page as HTML</li>
-                    <li>• <strong>History:</strong> Use extension to export reading history as JSON</li>
-                    <li>• <strong>Marked for Later:</strong> Use extension to export as JSON</li>
-                  </ul>
+                                     <h4 className="font-medium mb-2 text-blue-700">2. Export Your Data</h4>
+                   <ul className="text-sm text-blue-600 space-y-1">
+                     <li>• <strong>Bookmarks:</strong> Go to your bookmarks page, right-click → "Save As" → HTML file</li>
+                     <li>• <strong>History:</strong> Use extension to export reading history as JSON</li>
+                     <li>• <strong>Marked for Later:</strong> Use extension to export as JSON</li>
+                   </ul>
+                   <p className="text-xs text-blue-500 mt-2">
+                     <strong>Note:</strong> Make sure you're logged into AO3 when saving bookmarks!
+                   </p>
                 </div>
               </div>
             </div>
