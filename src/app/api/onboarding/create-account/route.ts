@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
     // Create session
     let sessionId;
     try {
-      sessionId = SimpleAuth.createSession(user);
+      sessionId = await SimpleAuth.createSession(user);
       console.log('Onboarding API: Session created:', sessionId);
     } catch (error) {
       console.log('Onboarding API: Failed to create session:', error);

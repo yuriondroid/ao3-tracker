@@ -69,8 +69,7 @@ export default function Home() {
         // Set the user data from the response
         setUser(result.user)
         setShowOnboarding(false)
-        // Refresh the page to show the dashboard
-        window.location.reload()
+        // Don't refresh the page - just update the state
       } else {
         console.error('Onboarding failed:', result.error)
         alert('Onboarding failed: ' + (result.error || 'Unknown error'))

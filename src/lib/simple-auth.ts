@@ -13,11 +13,7 @@ export interface User {
   ao3Username: string
 }
 
-// In-memory storage for sessions (for now)
-// In production, this should be replaced with Redis or database storage
-const sessions = new Map<string, User>()
-
-// Keep sessions alive for 7 days
+// Database storage for sessions
 const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 export class SimpleAuth {
@@ -51,33 +47,79 @@ export class SimpleAuth {
     }
   }
 
-  static createSession(user: User): string {
+  static async createSession(user: User): Promise<string> {
     const sessionId = `session_${user.ao3Username}_${Date.now()}`
-    sessions.set(sessionId, user)
-    console.log('SimpleAuth: Created session:', sessionId, 'for user:', user.name)
-    return sessionId
+    const expiresAt = new Date(Date.now() + SESSION_DURATION)
+    
+    try {
+      await supabase.from('sessions').insert({
+        id: sessionId,
+        user_id: user.id,
+        expires_at: expiresAt
+      })
+      console.log('SimpleAuth: Created session:', sessionId, 'for user:', user.name)
+      return sessionId
+    } catch (error) {
+      console.log('SimpleAuth: Failed to create session in database:', error)
+      return sessionId
+    }
   }
 
-  static getUserFromSession(sessionId: string): User | null {
-    const user = sessions.get(sessionId)
-    console.log('SimpleAuth: Getting user from session:', sessionId, 'User:', user?.name || 'not found')
-    return user || null
+  static async getUserFromSession(sessionId: string): Promise<User | null> {
+    try {
+      const { data: session, error } = await supabase
+        .from('sessions')
+        .select(`
+          id,
+          expires_at,
+          users!inner(id, username, display_name, email)
+        `)
+        .eq('id', sessionId)
+        .single()
+
+      if (error || !session) {
+        console.log('SimpleAuth: Session not found:', sessionId)
+        return null
+      }
+
+      // Check if session is expired
+      if (new Date(session.expires_at) < new Date()) {
+        console.log('SimpleAuth: Session expired:', sessionId)
+        await this.logout(sessionId)
+        return null
+      }
+
+      const user: User = {
+        id: session.users.id,
+        name: session.users.display_name,
+        email: session.users.email,
+        ao3Username: session.users.username
+      }
+
+      console.log('SimpleAuth: Getting user from session:', sessionId, 'User:', user.name)
+      return user
+    } catch (error) {
+      console.log('SimpleAuth: Error getting user from session:', error)
+      return null
+    }
   }
 
-  static logout(sessionId: string): void {
-    sessions.delete(sessionId)
-    console.log('SimpleAuth: Logged out session:', sessionId)
+  static async logout(sessionId: string): Promise<void> {
+    try {
+      await supabase.from('sessions').delete().eq('id', sessionId)
+      console.log('SimpleAuth: Logged out session:', sessionId)
+    } catch (error) {
+      console.log('SimpleAuth: Error logging out session:', error)
+    }
   }
 
   // Clean up expired sessions
-  static cleanupExpiredSessions(): void {
-    const now = Date.now()
-    for (const [sessionId, user] of sessions.entries()) {
-      const sessionTime = parseInt(sessionId.split('_').pop() || '0')
-      if (now - sessionTime > SESSION_DURATION) {
-        sessions.delete(sessionId)
-        console.log('SimpleAuth: Cleaned up expired session:', sessionId)
-      }
+  static async cleanupExpiredSessions(): Promise<void> {
+    try {
+      await supabase.from('sessions').delete().lt('expires_at', new Date().toISOString())
+      console.log('SimpleAuth: Cleaned up expired sessions')
+    } catch (error) {
+      console.log('SimpleAuth: Error cleaning up sessions:', error)
     }
   }
 }

@@ -5,6 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Drop existing tables if they exist (be careful with this in production!)
+DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS reading_sessions CASCADE;
 DROP TABLE IF EXISTS shelf_items CASCADE;
 DROP TABLE IF EXISTS user_shelves CASCADE;
@@ -23,6 +24,14 @@ CREATE TABLE users (
   onboarding_completed BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Sessions table for authentication
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- User preferences
@@ -123,6 +132,7 @@ $$ LANGUAGE plpgsql;
 
 -- Row Level Security (RLS) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE works ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shelves ENABLE ROW LEVEL SECURITY;
@@ -132,6 +142,10 @@ ALTER TABLE import_jobs ENABLE ROW LEVEL SECURITY;
 -- Users can only access their own data
 CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid()::text = id::text);
 CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid()::text = id::text);
+
+CREATE POLICY "Users can view own sessions" ON sessions FOR SELECT USING (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can insert own sessions" ON sessions FOR INSERT WITH CHECK (auth.uid()::text = user_id::text);
+CREATE POLICY "Users can delete own sessions" ON sessions FOR DELETE USING (auth.uid()::text = user_id::text);
 
 CREATE POLICY "Users can view own preferences" ON user_preferences FOR SELECT USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can update own preferences" ON user_preferences FOR UPDATE USING (auth.uid()::text = user_id::text);
@@ -159,6 +173,8 @@ CREATE POLICY "Users can update own import jobs" ON import_jobs FOR UPDATE USING
 CREATE INDEX IF NOT EXISTS idx_works_user_id ON works(user_id);
 CREATE INDEX IF NOT EXISTS idx_works_status ON works(status);
 CREATE INDEX IF NOT EXISTS idx_works_date_added ON works(date_added);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_shelves_user_id ON shelves(user_id);
 CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_id ON reading_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_import_jobs_user_id ON import_jobs(user_id);

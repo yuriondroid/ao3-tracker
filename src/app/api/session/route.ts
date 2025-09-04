@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     console.log('Session API: Checking session:', sessionId)
     
     if (sessionId) {
-      const user = SimpleAuth.getUserFromSession(sessionId)
+      const user = await SimpleAuth.getUserFromSession(sessionId)
       
       if (user) {
         console.log('Session API: User found:', user.name)
@@ -37,7 +37,7 @@ export async function DELETE(request: NextRequest) {
     const sessionId = request.cookies.get('sessionId')?.value
     
     if (sessionId) {
-      SimpleAuth.logout(sessionId)
+      await SimpleAuth.logout(sessionId)
       console.log('Session API: Logged out session:', sessionId)
     }
     
