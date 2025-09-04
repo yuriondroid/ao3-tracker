@@ -16,6 +16,7 @@ export default function Home() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
 
   // Debug logging
   console.log('User:', user)
@@ -65,16 +66,11 @@ export default function Home() {
 
       if (response.ok && result.success) {
         console.log('Onboarding successful:', result)
-        // Set the user data from the response instead of reloading
-        setUser({
-          id: result.user.id,
-          username: result.user.username,
-          displayName: result.user.displayName,
-          email: result.user.email,
-          onboardingCompleted: true
-        })
+        // Set the user data from the response
+        setUser(result.user)
         setShowOnboarding(false)
-        // Don't reload - just update the state
+        // Refresh the page to show the dashboard
+        window.location.reload()
       } else {
         console.error('Onboarding failed:', result.error)
         alert('Onboarding failed: ' + (result.error || 'Unknown error'))
@@ -102,9 +98,42 @@ export default function Home() {
     return <OnboardingFlow onComplete={handleOnboardingComplete} />
   }
 
-  // Show login form if not authenticated
+  // Show onboarding flow or login for new users
   if (!user) {
-    return <LoginForm onLogin={handleLogin} />
+    if (showOnboarding) {
+      return <OnboardingFlow onComplete={handleOnboardingComplete} />
+    }
+    
+    if (showLogin) {
+      return <LoginForm onLogin={handleLogin} />
+    }
+    
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-900">Welcome to AO3 Tracker</h2>
+            <p className="mt-2 text-gray-600">Track your fanfiction reading progress</p>
+          </div>
+          
+          <div className="space-y-4">
+            <button
+              onClick={() => setShowOnboarding(true)}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Create New Account
+            </button>
+            
+            <button
+              onClick={() => setShowLogin(true)}
+              className="w-full flex justify-center py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Sign In to Existing Account
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Show authenticated content

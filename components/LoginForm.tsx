@@ -62,7 +62,7 @@ export default function LoginForm({ onLogin }: { onLogin: (user: any) => void })
 
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                AO3 Username
+                Username
               </label>
               <div className="mt-1">
                 <input
@@ -73,14 +73,14 @@ export default function LoginForm({ onLogin }: { onLogin: (user: any) => void })
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
-                  placeholder="Enter your AO3 username"
+                  placeholder="Enter your username"
                 />
               </div>
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                AO3 Password
+                Password
               </label>
               <div className="mt-1 relative">
                 <input
@@ -91,7 +91,7 @@ export default function LoginForm({ onLogin }: { onLogin: (user: any) => void })
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
-                  placeholder="Enter your AO3 password"
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
