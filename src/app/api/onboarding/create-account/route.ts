@@ -307,29 +307,29 @@ export async function POST(request: NextRequest) {
 
       console.log('Onboarding API: Library batch sample:', libraryBatch[0]);
 
-      // Insert fanworks first - use insert instead of upsert to avoid conflicts
-      const { error: fanworksError } = await supabase
+      // Insert fanworks first - handle conflicts properly
+      const { data: fanworksData, error: fanworksError } = await supabase
         .from('fanworks')
-        .insert(fanworksBatch)
+        .upsert(fanworksBatch, { onConflict: 'ao3_work_id', ignoreDuplicates: false })
         .select();
 
       if (fanworksError) {
-        // If fanworks already exist, that's fine - continue to library
-        console.log(`Onboarding API: Fanworks batch ${i / batchSize + 1} already exists or error:`, fanworksError.message);
+        console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
+        continue; // Skip this batch if fanworks fail
       }
 
-      // Insert library entries - use insert instead of upsert
-      const { error: libraryError } = await supabase
-        .from('user_library')
-        .insert(libraryBatch)
-        .select();
+      // Only insert library entries if fanworks were successfully inserted
+      if (fanworksData && fanworksData.length > 0) {
+        const { error: libraryError } = await supabase
+          .from('user_library')
+          .upsert(libraryBatch, { onConflict: 'user_id,fanwork_id', ignoreDuplicates: false })
+          .select();
 
-      if (libraryError) {
-        console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
-      }
-
-      if (!fanworksError && !libraryError) {
-        processedCount += batch.length;
+        if (libraryError) {
+          console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
+        } else {
+          processedCount += batch.length;
+        }
       }
     }
 
@@ -373,7 +373,7 @@ export async function POST(request: NextRequest) {
       });
 
       response.cookies.set('sessionId', sessionId, {
-        httpOnly: true,
+        httpOnly: false, // Allow JavaScript access
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7
