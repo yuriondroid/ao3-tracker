@@ -59,63 +59,95 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
     
-    // Try different selectors for bookmarks
-    let bookmarks = doc.querySelectorAll('.bookmark');
-    if (bookmarks.length === 0) {
-      bookmarks = doc.querySelectorAll('.work.blurb');
-    }
-    if (bookmarks.length === 0) {
-      bookmarks = doc.querySelectorAll('.work');
-    }
-    if (bookmarks.length === 0) {
-      bookmarks = doc.querySelectorAll('[class*="bookmark"]');
-    }
+    // Find all work entries by looking for h4 headings with work links
+    const workEntries = doc.querySelectorAll('h4.heading a[href*="/works/"]');
     
-    return Array.from(bookmarks).map(bookmark => {
-      // Try multiple selectors for each field
-      const titleEl = bookmark.querySelector('h4 a, .heading a, .title a, a[href*="/works/"]');
-      const authorEl = bookmark.querySelector('.authors a, .byline a, .author a');
-      const fandomsEl = bookmark.querySelectorAll('.fandoms a, .fandom a, [class*="fandom"] a');
-      const ratingEl = bookmark.querySelector('.rating .text, .rating, [class*="rating"]');
-      const warningsEl = bookmark.querySelectorAll('.warnings .text, .warning, [class*="warning"]');
-      const categoriesEl = bookmark.querySelectorAll('.category .text, .category, [class*="category"]');
-      const relationshipsEl = bookmark.querySelectorAll('.relationships a, .relationship a, [class*="relationship"] a');
-      const charactersEl = bookmark.querySelectorAll('.characters a, .character a, [class*="character"] a');
-      const tagsEl = bookmark.querySelectorAll('.freeforms a, .tag a, [class*="tag"] a');
-      const wordsEl = bookmark.querySelector('.words, [class*="word"]');
-      const chaptersEl = bookmark.querySelector('.chapters, [class*="chapter"]');
-      const kudosEl = bookmark.querySelector('.kudos, [class*="kudo"]');
-      const hitsEl = bookmark.querySelector('.hits, [class*="hit"]');
-      const bookmarkCountEl = bookmark.querySelector('.bookmarks, [class*="bookmark"]');
-      const summaryEl = bookmark.querySelector('.summary blockquote, .summary, [class*="summary"]');
-      const dateEl = bookmark.querySelector('.datetime, .date, [class*="date"]');
+    return Array.from(workEntries).map(titleEl => {
+      // Get the parent container that holds all the work information
+      const workContainer = titleEl.closest('.header')?.parentElement || titleEl.parentElement?.parentElement;
+      if (!workContainer) return null;
       
-      const workId = titleEl?.getAttribute('href')?.match(/\/works\/(\d+)/)?.[1] || '';
+      // Extract work ID from URL
+      const workId = titleEl.getAttribute('href')?.match(/\/works\/(\d+)/)?.[1] || '';
+      
+      // Get title and author
+      const title = titleEl.textContent?.trim() || '';
+      const authorEl = workContainer.querySelector('a[rel="author"]');
+      const author = authorEl?.textContent?.trim() || '';
+      const authorUrl = authorEl?.getAttribute('href') || '';
+      
+      // Get fandoms
+      const fandomsEl = workContainer.querySelectorAll('.fandoms a.tag');
+      const fandoms = Array.from(fandomsEl).map(el => el.textContent?.trim() || '');
+      
+      // Get rating, warnings, categories from required tags
+      const ratingEl = workContainer.querySelector('.rating .text');
+      const rating = ratingEl?.textContent?.trim() || '';
+      
+      const warningsEl = workContainer.querySelectorAll('.warnings a.tag');
+      const warnings = Array.from(warningsEl).map(el => el.textContent?.trim() || '');
+      
+      const categoriesEl = workContainer.querySelectorAll('.category .text');
+      const categories = Array.from(categoriesEl).map(el => el.textContent?.trim() || '');
+      
+      // Get relationships, characters, and freeform tags
+      const relationshipsEl = workContainer.querySelectorAll('.relationships a.tag');
+      const relationships = Array.from(relationshipsEl).map(el => el.textContent?.trim() || '');
+      
+      const charactersEl = workContainer.querySelectorAll('.characters a.tag');
+      const characters = Array.from(charactersEl).map(el => el.textContent?.trim() || '');
+      
+      const tagsEl = workContainer.querySelectorAll('.freeforms a.tag');
+      const tags = Array.from(tagsEl).map(el => el.textContent?.trim() || '');
+      
+      // Get stats
+      const wordsEl = workContainer.querySelector('.words');
+      const words = parseInt(wordsEl?.textContent?.replace(/,/g, '') || '0') || 0;
+      
+      const chaptersEl = workContainer.querySelector('.chapters');
+      const chapters = chaptersEl?.textContent?.trim() || '1/1';
+      
+      const kudosEl = workContainer.querySelector('.kudos a');
+      const kudos = parseInt(kudosEl?.textContent?.replace(/,/g, '') || '0') || 0;
+      
+      const hitsEl = workContainer.querySelector('.hits');
+      const hits = parseInt(hitsEl?.textContent?.replace(/,/g, '') || '0') || 0;
+      
+      const bookmarksEl = workContainer.querySelector('.bookmarks a');
+      const bookmarks = parseInt(bookmarksEl?.textContent?.replace(/,/g, '') || '0') || 0;
+      
+      // Get summary
+      const summaryEl = workContainer.querySelector('.summary blockquote');
+      const summary = summaryEl?.textContent?.trim() || '';
+      
+      // Get bookmark date
+      const dateEl = workContainer.querySelector('.datetime');
+      const dateBookmarked = dateEl?.textContent?.trim() || '';
       
       return {
         id: workId,
-        title: titleEl?.textContent?.trim() || '',
-        author: authorEl?.textContent?.trim() || '',
-        author_url: authorEl?.getAttribute('href') || '',
-        url: titleEl?.getAttribute('href') || '',
-        fandoms: Array.from(fandomsEl).map(el => el.textContent?.trim() || ''),
-        rating: ratingEl?.textContent?.trim() || '',
-        warnings: Array.from(warningsEl).map(el => el.textContent?.trim() || ''),
-        categories: Array.from(categoriesEl).map(el => el.textContent?.trim() || ''),
-        relationships: Array.from(relationshipsEl).map(el => el.textContent?.trim() || ''),
-        characters: Array.from(charactersEl).map(el => el.textContent?.trim() || ''),
-        tags: Array.from(tagsEl).map(el => el.textContent?.trim() || ''),
-        words: parseInt(wordsEl?.textContent?.replace(/,/g, '') || '0') || 0,
-        chapters: chaptersEl?.textContent?.trim() || '1/1',
-        kudos: parseInt(kudosEl?.textContent?.replace(/,/g, '') || '0') || 0,
-        hits: parseInt(hitsEl?.textContent?.replace(/,/g, '') || '0') || 0,
-        bookmarks: parseInt(bookmarkCountEl?.textContent?.replace(/,/g, '') || '0') || 0,
-        summary: summaryEl?.textContent?.trim() || '',
-        date_bookmarked: dateEl?.textContent?.trim() || '',
+        title: title,
+        author: author,
+        author_url: authorUrl,
+        url: titleEl.getAttribute('href') || '',
+        fandoms: fandoms,
+        rating: rating,
+        warnings: warnings,
+        categories: categories,
+        relationships: relationships,
+        characters: characters,
+        tags: tags,
+        words: words,
+        chapters: chapters,
+        kudos: kudos,
+        hits: hits,
+        bookmarks: bookmarks,
+        summary: summary,
+        date_bookmarked: dateBookmarked,
         source: 'bookmarks',
         status: 'want-to-read' // Default status for bookmarked works
       };
-    }).filter(work => work.title && work.author);
+    }).filter(work => work && work.title && work.author);
   };
 
   // Parse AO3 History Extension JSON
@@ -126,30 +158,69 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       // Handle different possible formats from the extension
       const works = Array.isArray(data) ? data : data.history || data.works || [];
       
-      return works.map((work: any) => ({
-        id: work.id || work.work_id || '',
-        title: work.title || '',
-        author: work.author || work.authors?.join(', ') || '',
-        author_url: work.author_url || '',
-        url: work.url || `https://archiveofourown.org/works/${work.id}`,
-        fandoms: Array.isArray(work.fandoms) ? work.fandoms : [work.fandom].filter(Boolean),
-        rating: work.rating || '',
-        warnings: Array.isArray(work.warnings) ? work.warnings : [work.warning].filter(Boolean),
-        categories: Array.isArray(work.categories) ? work.categories : [work.category].filter(Boolean),
-        relationships: work.relationships || work.pairings || [],
-        characters: work.characters || [],
-        tags: work.additional_tags || work.tags || [],
-        words: parseInt(work.words) || 0,
-        chapters: work.chapters || '1/1',
-        kudos: parseInt(work.kudos) || 0,
-        hits: parseInt(work.hits) || 0,
-        bookmarks: parseInt(work.bookmarks) || 0,
-        summary: work.summary || '',
-        date_visited: work.date_visited || work.visited || work.last_read || '',
-        visit_count: work.visit_count || work.visits || 1,
-        source: 'history',
-        status: 'completed' // Assume works in history have been read
-      }));
+      return works.map((work: any) => {
+        // Handle nested fandoms structure
+        let fandoms = [];
+        if (Array.isArray(work.fandoms)) {
+          fandoms = work.fandoms.map((f: any) => typeof f === 'string' ? f : f.name || f).filter(Boolean);
+        } else if (work.fandom) {
+          fandoms = [work.fandom];
+        }
+
+        // Handle nested tags structure
+        let tags = [];
+        if (work.tags) {
+          if (Array.isArray(work.tags)) {
+            tags = work.tags;
+          } else if (typeof work.tags === 'object') {
+            // Extract tag names from nested structure
+            tags = Object.values(work.tags).map((tag: any) => 
+              typeof tag === 'string' ? tag : tag.name || tag
+            ).filter(Boolean);
+          }
+        }
+
+        // Handle warnings
+        let warnings = [];
+        if (Array.isArray(work.warnings)) {
+          warnings = work.warnings;
+        } else if (work.warning) {
+          warnings = [work.warning];
+        }
+
+        // Handle categories
+        let categories = [];
+        if (Array.isArray(work.categories)) {
+          categories = work.categories;
+        } else if (work.category) {
+          categories = [work.category];
+        }
+
+        return {
+          id: work.id || work.work_id || '',
+          title: work.title || '',
+          author: work.author || work.authors?.join(', ') || '',
+          author_url: work.authorUrl || work.author_url || '',
+          url: work.url || `https://archiveofourown.org/works/${work.id}`,
+          fandoms: fandoms,
+          rating: work.rating || '',
+          warnings: warnings,
+          categories: categories,
+          relationships: work.relationships || work.pairings || [],
+          characters: work.characters || [],
+          tags: tags,
+          words: parseInt(work.words) || 0,
+          chapters: work.chapters || work.completion || '1/1',
+          kudos: parseInt(work.kudos) || 0,
+          hits: parseInt(work.hits) || 0,
+          bookmarks: parseInt(work.bookmarks) || 0,
+          summary: work.summary || '',
+          date_visited: work.date_visited || work.visited || work.last_read || '',
+          visit_count: work.visit_count || work.visits || 1,
+          source: 'history',
+          status: 'completed' // Assume works in history have been read
+        };
+      });
     } catch (error) {
       throw new Error('Invalid JSON format in history file');
     }
@@ -161,29 +232,68 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       const data = JSON.parse(jsonContent);
       const works = Array.isArray(data) ? data : data.marked_for_later || data.works || [];
       
-      return works.map((work: any) => ({
-        id: work.id || work.work_id || '',
-        title: work.title || '',
-        author: work.author || work.authors?.join(', ') || '',
-        author_url: work.author_url || '',
-        url: work.url || `https://archiveofourown.org/works/${work.id}`,
-        fandoms: Array.isArray(work.fandoms) ? work.fandoms : [work.fandom].filter(Boolean),
-        rating: work.rating || '',
-        warnings: Array.isArray(work.warnings) ? work.warnings : [work.warning].filter(Boolean),
-        categories: Array.isArray(work.categories) ? work.categories : [work.category].filter(Boolean),
-        relationships: work.relationships || work.pairings || [],
-        characters: work.characters || [],
-        tags: work.additional_tags || work.tags || [],
-        words: parseInt(work.words) || 0,
-        chapters: work.chapters || '1/1',
-        kudos: parseInt(work.kudos) || 0,
-        hits: parseInt(work.hits) || 0,
-        bookmarks: parseInt(work.bookmarks) || 0,
-        summary: work.summary || '',
-        date_marked: work.date_marked || work.marked || '',
-        source: 'marked-for-later',
-        status: 'to-read' // Default status for marked for later
-      }));
+      return works.map((work: any) => {
+        // Handle nested fandoms structure
+        let fandoms = [];
+        if (Array.isArray(work.fandoms)) {
+          fandoms = work.fandoms.map((f: any) => typeof f === 'string' ? f : f.name || f).filter(Boolean);
+        } else if (work.fandom) {
+          fandoms = [work.fandom];
+        }
+
+        // Handle nested tags structure
+        let tags = [];
+        if (work.tags) {
+          if (Array.isArray(work.tags)) {
+            tags = work.tags;
+          } else if (typeof work.tags === 'object') {
+            // Extract tag names from nested structure
+            tags = Object.values(work.tags).map((tag: any) => 
+              typeof tag === 'string' ? tag : tag.name || tag
+            ).filter(Boolean);
+          }
+        }
+
+        // Handle warnings
+        let warnings = [];
+        if (Array.isArray(work.warnings)) {
+          warnings = work.warnings;
+        } else if (work.warning) {
+          warnings = [work.warning];
+        }
+
+        // Handle categories
+        let categories = [];
+        if (Array.isArray(work.categories)) {
+          categories = work.categories;
+        } else if (work.category) {
+          categories = [work.category];
+        }
+
+        return {
+          id: work.id || work.work_id || '',
+          title: work.title || '',
+          author: work.author || work.authors?.join(', ') || '',
+          author_url: work.authorUrl || work.author_url || '',
+          url: work.url || `https://archiveofourown.org/works/${work.id}`,
+          fandoms: fandoms,
+          rating: work.rating || '',
+          warnings: warnings,
+          categories: categories,
+          relationships: work.relationships || work.pairings || [],
+          characters: work.characters || [],
+          tags: tags,
+          words: parseInt(work.words) || 0,
+          chapters: work.chapters || work.completion || '1/1',
+          kudos: parseInt(work.kudos) || 0,
+          hits: parseInt(work.hits) || 0,
+          bookmarks: parseInt(work.bookmarks) || 0,
+          summary: work.summary || '',
+          date_marked: work.date_marked || work.marked || '',
+          source: 'marked-for-later',
+          status: 'to-read' // Default status for marked for later
+        };
+      });
     } catch (error) {
       throw new Error('Invalid JSON format in marked for later file');
     }
