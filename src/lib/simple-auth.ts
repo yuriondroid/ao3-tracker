@@ -72,7 +72,7 @@ export class SimpleAuth {
         .select(`
           id,
           expires_at,
-          users!inner(id, username, display_name, email)
+          user_id
         `)
         .eq('id', sessionId)
         .single()
@@ -89,11 +89,23 @@ export class SimpleAuth {
         return null
       }
 
+      // Get user data from users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, username, display_name, email')
+        .eq('id', session.user_id)
+        .single()
+
+      if (userError || !userData) {
+        console.log('SimpleAuth: User not found for session:', sessionId)
+        return null
+      }
+
       const user: User = {
-        id: session.users.id,
-        name: session.users.display_name,
-        email: session.users.email,
-        ao3Username: session.users.username
+        id: userData.id,
+        name: userData.display_name,
+        email: userData.email,
+        ao3Username: userData.username
       }
 
       console.log('SimpleAuth: Getting user from session:', sessionId, 'User:', user.name)
