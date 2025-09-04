@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { SimpleAuth } from '@/lib/simple-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,9 +19,31 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
-    // Get user ID from session (you'll need to implement this based on your session system)
-    // For now, we'll use a placeholder - you should get this from your session
-    const userId = 'placeholder-user-id'; // Replace with actual user ID from session
+    // Get user from session
+    const user = SimpleAuth.getUserFromSession(sessionId);
+    
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid session' 
+      }, { status: 401 });
+    }
+
+    // Get user ID from database
+    const { data: dbUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('ao3_username', user.ao3Username)
+      .single();
+
+    if (!dbUser) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'User not found in database' 
+      }, { status: 404 });
+    }
+
+    const userId = dbUser.id;
 
     // Fetch library data from database
     const { data: libraryEntries, error } = await supabase
