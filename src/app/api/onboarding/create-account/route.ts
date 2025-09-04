@@ -140,7 +140,6 @@ export async function POST(request: NextRequest) {
         kudos: parseInt(work.kudos) || 0,
         hits: parseInt(work.hits) || 0,
         bookmarks: parseInt(work.bookmarks) || 0,
-        comments: 0,
         published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
         updated_date: new Date(),
         summary: work.summary || '',
@@ -182,7 +181,6 @@ export async function POST(request: NextRequest) {
         kudos: parseInt(work.kudos) || 0,
         hits: parseInt(work.hits) || 0,
         bookmarks: parseInt(work.bookmarks) || 0,
-        comments: 0,
         published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
         updated_date: new Date(),
         summary: work.summary || '',
@@ -224,7 +222,6 @@ export async function POST(request: NextRequest) {
         kudos: parseInt(work.kudos) || 0,
         hits: parseInt(work.hits) || 0,
         bookmarks: parseInt(work.bookmarks) || 0,
-        comments: 0,
         published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
         updated_date: new Date(),
         summary: work.summary || '',
@@ -270,88 +267,34 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Save works to database - try both old and new table names
+    // Save works to database - use only the new works table
     const batchSize = 50;
     let processedCount = 0;
+
+    console.log('Onboarding API: About to save', uniqueWorks.length, 'works to database');
 
     for (let i = 0; i < uniqueWorks.length; i += batchSize) {
       const batch = uniqueWorks.slice(i, i + batchSize);
       
       console.log('Onboarding API: Processing batch', i / batchSize + 1, 'with', batch.length, 'works');
+      console.log('Onboarding API: Sample work from batch:', JSON.stringify(batch[0], null, 2));
 
-      // Try to insert into works table first (new schema)
-      let { data: worksData, error: worksError } = await supabase
+      // Insert works directly into the works table (new schema)
+      const { data: worksData, error: worksError } = await supabase
         .from('works')
         .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
         .select();
 
       if (worksError) {
-        console.log('Onboarding API: Failed to insert into works table, trying fanworks table:', worksError);
-        
-        // Fallback to old schema if works table doesn't exist
-        const { data: fanworksData, error: fanworksError } = await supabase
-          .from('fanworks')
-          .upsert(batch.map(work => ({
-            id: work.id,
-            title: work.title,
-            author: work.author,
-            author_url: work.author_url,
-            fandom: work.fandom,
-            relationship: work.relationship,
-            characters: work.characters,
-            additional_tags: work.additional_tags,
-            rating: work.rating,
-            warnings: work.warnings,
-            categories: work.categories,
-            chapters_current: work.chapters_current,
-            chapters_total: work.chapters_total,
-            words: work.words,
-            kudos: work.kudos,
-            hits: work.hits,
-            bookmarks: work.bookmarks,
-            comments: work.comments,
-            published_date: work.published_date,
-            updated_date: work.updated_date,
-            summary: work.summary,
-            url: work.url
-          })), { onConflict: 'id', ignoreDuplicates: false })
-          .select();
+        console.error(`Onboarding API: Failed to insert works batch ${i / batchSize + 1}:`, worksError);
+        console.error('Onboarding API: Error details:', JSON.stringify(worksError, null, 2));
+        continue; // Skip this batch if works fail
+      }
 
-        if (fanworksError) {
-          console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
-          continue;
-        }
+      console.log(`Onboarding API: Successfully inserted batch ${i / batchSize + 1}:`, worksData?.length || 0, 'works');
 
-        // Insert into user_library table
-        const { data: libraryData, error: libraryError } = await supabase
-          .from('user_library')
-          .upsert(batch.map(work => ({
-            user_id: work.user_id,
-            fanwork_id: work.id,
-            reading_status: work.status,
-            user_rating: work.user_rating,
-            progress_percentage: work.progress,
-            current_chapter: work.chapters_current,
-            date_added: work.date_added,
-            date_started: work.date_started,
-            date_completed: work.date_completed,
-            last_read: work.date_visited,
-            private_notes: work.user_notes
-          })), { onConflict: 'user_id,fanwork_id', ignoreDuplicates: false })
-          .select();
-
-        if (libraryError) {
-          console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
-          continue;
-        }
-
-        if (libraryData && libraryData.length > 0) {
-          processedCount += libraryData.length;
-        }
-      } else {
-        if (worksData && worksData.length > 0) {
-          processedCount += worksData.length;
-        }
+      if (worksData && worksData.length > 0) {
+        processedCount += worksData.length;
       }
     }
 
