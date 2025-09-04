@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS works (
   url TEXT,
   status TEXT DEFAULT 'to-read', -- 'reading', 'completed', 'dropped', 'to-read', 'want-to-read'
   progress INTEGER DEFAULT 0, -- percentage read
-  user_rating INTEGER, -- 1-5 stars
+  user_rating INTEGER CHECK (user_rating IS NULL OR (user_rating >= 1 AND user_rating <= 5)), -- 1-5 stars
   user_notes TEXT,
   shelf_id TEXT,
   date_added TIMESTAMP DEFAULT NOW(),

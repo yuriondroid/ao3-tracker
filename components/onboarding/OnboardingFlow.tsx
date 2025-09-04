@@ -298,8 +298,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
               <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <User className="w-8 h-8 text-purple-600" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Your Account</h2>
-              <p className="text-gray-600">Set up your AO3 Tracker account</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Make an Account</h2>
+              <p className="text-gray-600">Create your AO3 Tracker account</p>
             </div>
 
             <div className="space-y-4">

@@ -74,20 +74,18 @@ const HomePage: React.FC = () => {
           const libraryData = await libraryResponse.json();
           
           if (libraryData.success && libraryData.library) {
-            // Convert library entries to Work format
-            const convertedWorks: Work[] = libraryData.library.map((entry: any) => ({
-              id: entry.fanwork_id,
-              title: entry.fanworks?.title || 'Unknown Title',
-              author: entry.fanworks?.author || 'Unknown Author',
-              words: entry.fanworks?.word_count || 0,
-              status: entry.reading_status || 'to-read',
-              source: entry.private_notes?.includes('bookmarks') ? 'bookmarks' : 
-                     entry.private_notes?.includes('history') ? 'history' : 
-                     entry.private_notes?.includes('marked for later') ? 'marked-for-later' : 'unknown',
-              date_added: entry.date_added,
-              kudos: entry.fanworks?.kudos || 0,
-              hits: entry.fanworks?.hits || 0,
-              bookmarks: entry.fanworks?.bookmarks || 0
+            // Convert works to Work format
+            const convertedWorks: Work[] = libraryData.library.map((work: any) => ({
+              id: work.id,
+              title: work.title || 'Unknown Title',
+              author: work.author || 'Unknown Author',
+              words: work.words || 0,
+              status: work.status || 'to-read',
+              source: work.source || 'unknown',
+              date_added: work.date_added,
+              kudos: work.kudos || 0,
+              hits: work.hits || 0,
+              bookmarks: work.bookmarks || 0
             }));
             
             setWorks(convertedWorks);
@@ -137,7 +135,7 @@ const HomePage: React.FC = () => {
       {/* Welcome Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome back, {user?.displayName || user?.username || 'User'}!
+          Welcome back, {user?.name || user?.ao3Username || 'User'}!
         </h1>
         <p className="text-gray-600">
           Here's what's happening with your AO3 library

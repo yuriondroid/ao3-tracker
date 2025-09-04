@@ -21,6 +21,13 @@ export async function POST(request: NextRequest) {
     });
   };
 
+  // Helper function to ensure arrays are properly formatted
+  const ensureArray = (value: any): any[] => {
+    if (Array.isArray(value)) return value;
+    if (value) return [value];
+    return [];
+  };
+
   try {
     let requestData;
     try {
@@ -74,8 +81,10 @@ export async function POST(request: NextRequest) {
       .insert({
         id: user.id,
         email,
-        ao3_username: username,
-        ao3_session_token: 'temp_token'
+        username,
+        password: hashedPassword,
+        display_name: displayName,
+        onboarding_completed: true
       })
       .select()
       .single();
@@ -86,7 +95,7 @@ export async function POST(request: NextRequest) {
         const { data: existingUser, error: fetchError } = await supabase
           .from('users')
           .select()
-          .eq('ao3_username', username)
+          .eq('username', username)
           .single();
 
         if (fetchError) {
@@ -109,41 +118,41 @@ export async function POST(request: NextRequest) {
     if (importData?.bookmarks && importData.bookmarks.length > 0) {
       console.log('Onboarding API: Processing', importData.bookmarks.length, 'bookmarks');
       allWorks.push(...importData.bookmarks.map((work: any) => ({
-        id: uuidv4(),
-        ao3_work_id: work.id,
+        id: work.id || uuidv4(),
+        user_id: dbUser.id,
         title: work.title,
         author: work.author,
-        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
-        relationship: work.relationships?.join(', ') || 'No Relationship',
-        additional_tags: work.tags || [],
+        author_url: work.author_url || '',
+        fandom: ensureArray(work.fandoms),
+        relationship: ensureArray(work.relationships),
+        characters: ensureArray(work.characters),
+        additional_tags: ensureArray(work.tags),
         rating: work.rating || 'NR',
-        warnings: work.warnings || ['No Archive Warnings Apply'],
-        category: work.categories?.join(', ') || null,
-        status: 'to-read',
-        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
+        warnings: ensureArray(work.warnings).length > 0 ? ensureArray(work.warnings) : ['No Archive Warnings Apply'],
+        categories: ensureArray(work.categories),
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        word_count: work.words || 0,
-        language: 'English',
-        published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
-        updated_date: new Date(),
-        summary: work.summary || '',
+        words: work.words || 0,
         kudos: work.kudos || 0,
         hits: work.hits || 0,
         bookmarks: work.bookmarks || 0,
         comments: 0,
-        last_scraped: new Date(),
-        
-        // User library data
-        user_id: dbUser.id,
-        reading_status: 'want-to-read',
+        published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
+        updated_date: new Date(),
+        summary: work.summary || '',
+        url: work.url || '',
+        status: 'want-to-read',
+        progress: 0,
         user_rating: null,
-        progress_percentage: 0,
-        current_chapter: 1,
-        date_added: new Date().toISOString(),
+        user_notes: `Imported from bookmarks on ${new Date().toISOString()}`,
+        date_added: new Date(),
         date_started: null,
         date_completed: null,
-        last_read: null,
-        private_notes: `Imported from bookmarks on ${new Date().toISOString()}`
+        source: 'bookmarks',
+        visit_count: 1,
+        date_visited: null,
+        date_bookmarked: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
+        date_marked: null
       })));
     }
 
@@ -151,41 +160,41 @@ export async function POST(request: NextRequest) {
     if (importData?.history && importData.history.length > 0) {
       console.log('Onboarding API: Processing', importData.history.length, 'history works');
       allWorks.push(...importData.history.map((work: any) => ({
-        id: uuidv4(),
-        ao3_work_id: work.id,
+        id: work.id || uuidv4(),
+        user_id: dbUser.id,
         title: work.title,
         author: work.author,
-        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
-        relationship: work.relationships?.join(', ') || 'No Relationship',
-        additional_tags: work.tags || [],
+        author_url: work.author_url || '',
+        fandom: ensureArray(work.fandoms),
+        relationship: ensureArray(work.relationships),
+        characters: ensureArray(work.characters),
+        additional_tags: ensureArray(work.tags),
         rating: work.rating || 'NR',
-        warnings: work.warnings || ['No Archive Warnings Apply'],
-        category: work.categories?.join(', ') || null,
-        status: 'to-read',
-        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
+        warnings: ensureArray(work.warnings).length > 0 ? ensureArray(work.warnings) : ['No Archive Warnings Apply'],
+        categories: ensureArray(work.categories),
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        word_count: work.words || 0,
-        language: 'English',
-        published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
-        updated_date: new Date(),
-        summary: work.summary || '',
+        words: work.words || 0,
         kudos: work.kudos || 0,
         hits: work.hits || 0,
         bookmarks: work.bookmarks || 0,
         comments: 0,
-        last_scraped: new Date(),
-        
-        // User library data
-        user_id: dbUser.id,
-        reading_status: 'completed',
+        published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
+        updated_date: new Date(),
+        summary: work.summary || '',
+        url: work.url || '',
+        status: 'completed',
+        progress: 100,
         user_rating: null,
-        progress_percentage: 100,
-        current_chapter: parseInt(work.chapters?.split('/')[1]) || 1,
-        date_added: new Date().toISOString(),
+        user_notes: `Imported from history on ${new Date().toISOString()}`,
+        date_added: new Date(),
         date_started: work.date_visited ? new Date(work.date_visited) : new Date(),
         date_completed: work.date_visited ? new Date(work.date_visited) : new Date(),
-        last_read: work.date_visited ? new Date(work.date_visited) : new Date(),
-        private_notes: `Imported from history on ${new Date().toISOString()}`
+        source: 'history',
+        visit_count: work.visit_count || 1,
+        date_visited: work.date_visited ? new Date(work.date_visited) : new Date(),
+        date_bookmarked: null,
+        date_marked: null
       })));
     }
 
@@ -193,53 +202,53 @@ export async function POST(request: NextRequest) {
     if (importData?.markedForLater && importData.markedForLater.length > 0) {
       console.log('Onboarding API: Processing', importData.markedForLater.length, 'marked for later works');
       allWorks.push(...importData.markedForLater.map((work: any) => ({
-        id: uuidv4(),
-        ao3_work_id: work.id,
+        id: work.id || uuidv4(),
+        user_id: dbUser.id,
         title: work.title,
         author: work.author,
-        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
-        relationship: work.relationships?.join(', ') || 'No Relationship',
-        additional_tags: work.tags || [],
+        author_url: work.author_url || '',
+        fandom: ensureArray(work.fandoms),
+        relationship: ensureArray(work.relationships),
+        characters: ensureArray(work.characters),
+        additional_tags: ensureArray(work.tags),
         rating: work.rating || 'NR',
-        warnings: work.warnings || ['No Archive Warnings Apply'],
-        category: work.categories?.join(', ') || null,
-        status: 'to-read',
-        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
+        warnings: ensureArray(work.warnings).length > 0 ? ensureArray(work.warnings) : ['No Archive Warnings Apply'],
+        categories: ensureArray(work.categories),
+        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        word_count: work.words || 0,
-        language: 'English',
-        published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
-        updated_date: new Date(),
-        summary: work.summary || '',
+        words: work.words || 0,
         kudos: work.kudos || 0,
         hits: work.hits || 0,
         bookmarks: work.bookmarks || 0,
         comments: 0,
-        last_scraped: new Date(),
-        
-        // User library data
-        user_id: dbUser.id,
-        reading_status: 'to-read',
+        published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
+        updated_date: new Date(),
+        summary: work.summary || '',
+        url: work.url || '',
+        status: 'to-read',
+        progress: 0,
         user_rating: null,
-        progress_percentage: 0,
-        current_chapter: 1,
-        date_added: new Date().toISOString(),
+        user_notes: `Imported from marked for later on ${new Date().toISOString()}`,
+        date_added: new Date(),
         date_started: null,
         date_completed: null,
-        last_read: null,
-        private_notes: `Imported from marked for later on ${new Date().toISOString()}`
+        source: 'marked-for-later',
+        visit_count: 1,
+        date_visited: null,
+        date_bookmarked: null,
+        date_marked: work.date_marked ? new Date(work.date_marked) : new Date()
       })));
     }
 
-    // Remove duplicates based on AO3 work ID
+    // Remove duplicates based on work ID
     const uniqueWorks = allWorks.reduce((acc: any[], current: any) => {
-      const existing = acc.find((work: any) => work.ao3_work_id === current.ao3_work_id);
+      const existing = acc.find((work: any) => work.id === current.id);
       if (!existing) {
         acc.push(current);
       } else {
         // If duplicate, prefer the one with higher priority status
         const statusPriority: Record<string, number> = { 'completed': 3, 'reading': 2, 'want-to-read': 1, 'to-read': 0 };
-        if (statusPriority[current.reading_status] > statusPriority[existing.reading_status]) {
+        if (statusPriority[current.status] > statusPriority[existing.status]) {
           const index = acc.indexOf(existing);
           acc[index] = current;
         }
@@ -264,72 +273,21 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < uniqueWorks.length; i += batchSize) {
       const batch = uniqueWorks.slice(i, i + batchSize);
       
-      // Split into fanwork and library data
-      const fanworksBatch = batch.map(work => ({
-        id: work.id,
-        ao3_work_id: work.ao3_work_id,
-        title: work.title,
-        author: work.author,
-        fandom: work.fandom,
-        relationship: work.relationship,
-        additional_tags: work.additional_tags,
-        rating: work.rating,
-        warnings: work.warnings,
-        category: work.category,
-        status: work.status,
-        chapters_published: work.chapters_published,
-        chapters_total: work.chapters_total,
-        word_count: work.word_count,
-        language: work.language,
-        published_date: work.published_date,
-        updated_date: work.updated_date,
-        summary: work.summary,
-        kudos: work.kudos,
-        hits: work.hits,
-        bookmarks: work.bookmarks,
-        comments: work.comments,
-        last_scraped: work.last_scraped
-      }));
+      console.log('Onboarding API: Processing batch', i / batchSize + 1, 'with', batch.length, 'works');
 
-      const libraryBatch = batch.map(work => ({
-        user_id: work.user_id,
-        fanwork_id: work.id,
-        reading_status: work.reading_status,
-        user_rating: work.user_rating,
-        progress_percentage: work.progress_percentage,
-        current_chapter: work.current_chapter,
-        date_added: work.date_added,
-        date_started: work.date_started,
-        date_completed: work.date_completed,
-        last_read: work.last_read,
-        private_notes: work.private_notes
-      }));
-
-      console.log('Onboarding API: Library batch sample:', libraryBatch[0]);
-
-      // Insert fanworks first - handle conflicts properly
-      const { data: fanworksData, error: fanworksError } = await supabase
-        .from('fanworks')
-        .upsert(fanworksBatch, { onConflict: 'ao3_work_id', ignoreDuplicates: false })
+      // Insert works directly into the works table
+      const { data: worksData, error: worksError } = await supabase
+        .from('works')
+        .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
         .select();
 
-      if (fanworksError) {
-        console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
-        continue; // Skip this batch if fanworks fail
+      if (worksError) {
+        console.error(`Onboarding API: Failed to insert works batch ${i / batchSize + 1}:`, worksError);
+        continue; // Skip this batch if works fail
       }
 
-      // Only insert library entries if fanworks were successfully inserted
-      if (fanworksData && fanworksData.length > 0) {
-        const { error: libraryError } = await supabase
-          .from('user_library')
-          .upsert(libraryBatch, { onConflict: 'user_id,fanwork_id', ignoreDuplicates: false })
-          .select();
-
-        if (libraryError) {
-          console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
-        } else {
-          processedCount += batch.length;
-        }
+      if (worksData && worksData.length > 0) {
+        processedCount += worksData.length;
       }
     }
 
@@ -341,6 +299,21 @@ export async function POST(request: NextRequest) {
       console.log('Onboarding API: Created default shelves for user');
     } catch (error) {
       console.log('Onboarding API: Failed to create default shelves:', error);
+      // Fallback: create shelves manually
+      try {
+        const defaultShelves = [
+          { id: uuidv4(), user_id: dbUser.id, name: 'Currently Reading', is_default: true },
+          { id: uuidv4(), user_id: dbUser.id, name: 'Want to Read', is_default: true },
+          { id: uuidv4(), user_id: dbUser.id, name: 'Completed', is_default: true },
+          { id: uuidv4(), user_id: dbUser.id, name: 'Favorites', is_default: true },
+          { id: uuidv4(), user_id: dbUser.id, name: 'Dropped', is_default: true }
+        ];
+        
+        await supabase.from('shelves').insert(defaultShelves);
+        console.log('Onboarding API: Created default shelves manually');
+      } catch (shelfError) {
+        console.log('Onboarding API: Failed to create shelves manually:', shelfError);
+      }
     }
 
     // Create session

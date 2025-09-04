@@ -29,29 +29,12 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
-    // Get user ID from database
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ao3_username', user.ao3Username)
-      .single();
+    const userId = user.id;
 
-    if (!dbUser) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'User not found in database' 
-      }, { status: 404 });
-    }
-
-    const userId = dbUser.id;
-
-    // Fetch library data from database
-    const { data: libraryEntries, error } = await supabase
-      .from('user_library')
-      .select(`
-        *,
-        fanworks (*)
-      `)
+    // Fetch works directly from the works table
+    const { data: works, error } = await supabase
+      .from('works')
+      .select('*')
       .eq('user_id', userId)
       .order('date_added', { ascending: false });
 
@@ -65,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      library: libraryEntries || []
+      library: works || []
     });
 
   } catch (error) {
