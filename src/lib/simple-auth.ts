@@ -33,7 +33,7 @@ export class SimpleAuth {
   }
 
   static createSession(user: User): string {
-    const sessionId = `session_${user.id}_${Date.now()}`
+    const sessionId = `session_${user.ao3Username}_${Date.now()}`
     sessions.set(sessionId, user)
     console.log('SimpleAuth: Created session:', sessionId, 'for user:', user.name)
     return sessionId
