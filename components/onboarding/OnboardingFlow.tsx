@@ -174,7 +174,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
             tags = work.tags;
           } else if (typeof work.tags === 'object') {
             // Extract tag names from nested structure
-            tags = Object.values(work.tags).map((tag: any) => 
+            tags = Object.values(work.tags).flat().map((tag: any) => 
               typeof tag === 'string' ? tag : tag.name || tag
             ).filter(Boolean);
           }
@@ -241,14 +241,14 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           fandoms = [work.fandom];
         }
 
-        // Handle nested tags structure
+        // Handle nested tags structure - this is the key fix
         let tags = [];
         if (work.tags) {
           if (Array.isArray(work.tags)) {
             tags = work.tags;
           } else if (typeof work.tags === 'object') {
-            // Extract tag names from nested structure
-            tags = Object.values(work.tags).map((tag: any) => 
+            // Extract tag names from nested structure - flatten the arrays
+            tags = Object.values(work.tags).flat().map((tag: any) => 
               typeof tag === 'string' ? tag : tag.name || tag
             ).filter(Boolean);
           }
