@@ -307,16 +307,17 @@ export async function POST(request: NextRequest) {
 
       console.log('Onboarding API: Library batch sample:', libraryBatch[0]);
 
-      // Insert fanworks
+      // Insert fanworks first
       const { error: fanworksError } = await supabase
         .from('fanworks')
         .upsert(fanworksBatch, { onConflict: 'ao3_work_id' });
 
       if (fanworksError) {
         console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
+        continue; // Skip this batch if fanworks fail
       }
 
-      // Insert library entries
+      // Insert library entries after fanworks are confirmed
       const { error: libraryError } = await supabase
         .from('user_library')
         .upsert(libraryBatch, { onConflict: 'user_id,fanwork_id' });
