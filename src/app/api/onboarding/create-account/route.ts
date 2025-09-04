@@ -22,9 +22,13 @@ export async function POST(request: NextRequest) {
   };
 
   // Helper function to ensure arrays are properly formatted
-  const ensureArray = (value: any): any[] => {
-    if (Array.isArray(value)) return value;
-    if (value) return [value];
+  const ensureArray = (value: any): string[] => {
+    if (Array.isArray(value)) {
+      return value.map(v => String(v)).filter(Boolean);
+    }
+    if (value) {
+      return [String(value)];
+    }
     return [];
   };
 
@@ -120,8 +124,8 @@ export async function POST(request: NextRequest) {
       allWorks.push(...importData.bookmarks.map((work: any) => ({
         id: work.id || uuidv4(),
         user_id: dbUser.id,
-        title: work.title,
-        author: work.author,
+        title: work.title || 'Untitled',
+        author: work.author || 'Unknown Author',
         author_url: work.author_url || '',
         fandom: ensureArray(work.fandoms),
         relationship: ensureArray(work.relationships),
@@ -132,10 +136,10 @@ export async function POST(request: NextRequest) {
         categories: ensureArray(work.categories),
         chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        words: work.words || 0,
-        kudos: work.kudos || 0,
-        hits: work.hits || 0,
-        bookmarks: work.bookmarks || 0,
+        words: parseInt(work.words) || 0,
+        kudos: parseInt(work.kudos) || 0,
+        hits: parseInt(work.hits) || 0,
+        bookmarks: parseInt(work.bookmarks) || 0,
         comments: 0,
         published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
         updated_date: new Date(),
@@ -162,8 +166,8 @@ export async function POST(request: NextRequest) {
       allWorks.push(...importData.history.map((work: any) => ({
         id: work.id || uuidv4(),
         user_id: dbUser.id,
-        title: work.title,
-        author: work.author,
+        title: work.title || 'Untitled',
+        author: work.author || 'Unknown Author',
         author_url: work.author_url || '',
         fandom: ensureArray(work.fandoms),
         relationship: ensureArray(work.relationships),
@@ -174,10 +178,10 @@ export async function POST(request: NextRequest) {
         categories: ensureArray(work.categories),
         chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        words: work.words || 0,
-        kudos: work.kudos || 0,
-        hits: work.hits || 0,
-        bookmarks: work.bookmarks || 0,
+        words: parseInt(work.words) || 0,
+        kudos: parseInt(work.kudos) || 0,
+        hits: parseInt(work.hits) || 0,
+        bookmarks: parseInt(work.bookmarks) || 0,
         comments: 0,
         published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
         updated_date: new Date(),
@@ -204,8 +208,8 @@ export async function POST(request: NextRequest) {
       allWorks.push(...importData.markedForLater.map((work: any) => ({
         id: work.id || uuidv4(),
         user_id: dbUser.id,
-        title: work.title,
-        author: work.author,
+        title: work.title || 'Untitled',
+        author: work.author || 'Unknown Author',
         author_url: work.author_url || '',
         fandom: ensureArray(work.fandoms),
         relationship: ensureArray(work.relationships),
@@ -216,10 +220,10 @@ export async function POST(request: NextRequest) {
         categories: ensureArray(work.categories),
         chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        words: work.words || 0,
-        kudos: work.kudos || 0,
-        hits: work.hits || 0,
-        bookmarks: work.bookmarks || 0,
+        words: parseInt(work.words) || 0,
+        kudos: parseInt(work.kudos) || 0,
+        hits: parseInt(work.hits) || 0,
+        bookmarks: parseInt(work.bookmarks) || 0,
         comments: 0,
         published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
         updated_date: new Date(),
@@ -266,7 +270,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Save works to database
+    // Save works to database - try both old and new table names
     const batchSize = 50;
     let processedCount = 0;
 
@@ -275,19 +279,79 @@ export async function POST(request: NextRequest) {
       
       console.log('Onboarding API: Processing batch', i / batchSize + 1, 'with', batch.length, 'works');
 
-      // Insert works directly into the works table
-      const { data: worksData, error: worksError } = await supabase
+      // Try to insert into works table first (new schema)
+      let { data: worksData, error: worksError } = await supabase
         .from('works')
         .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
         .select();
 
       if (worksError) {
-        console.error(`Onboarding API: Failed to insert works batch ${i / batchSize + 1}:`, worksError);
-        continue; // Skip this batch if works fail
-      }
+        console.log('Onboarding API: Failed to insert into works table, trying fanworks table:', worksError);
+        
+        // Fallback to old schema if works table doesn't exist
+        const { data: fanworksData, error: fanworksError } = await supabase
+          .from('fanworks')
+          .upsert(batch.map(work => ({
+            id: work.id,
+            title: work.title,
+            author: work.author,
+            author_url: work.author_url,
+            fandom: work.fandom,
+            relationship: work.relationship,
+            characters: work.characters,
+            additional_tags: work.additional_tags,
+            rating: work.rating,
+            warnings: work.warnings,
+            categories: work.categories,
+            chapters_current: work.chapters_current,
+            chapters_total: work.chapters_total,
+            words: work.words,
+            kudos: work.kudos,
+            hits: work.hits,
+            bookmarks: work.bookmarks,
+            comments: work.comments,
+            published_date: work.published_date,
+            updated_date: work.updated_date,
+            summary: work.summary,
+            url: work.url
+          })), { onConflict: 'id', ignoreDuplicates: false })
+          .select();
 
-      if (worksData && worksData.length > 0) {
-        processedCount += worksData.length;
+        if (fanworksError) {
+          console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
+          continue;
+        }
+
+        // Insert into user_library table
+        const { data: libraryData, error: libraryError } = await supabase
+          .from('user_library')
+          .upsert(batch.map(work => ({
+            user_id: work.user_id,
+            fanwork_id: work.id,
+            reading_status: work.status,
+            user_rating: work.user_rating,
+            progress_percentage: work.progress,
+            current_chapter: work.chapters_current,
+            date_added: work.date_added,
+            date_started: work.date_started,
+            date_completed: work.date_completed,
+            last_read: work.date_visited,
+            private_notes: work.user_notes
+          })), { onConflict: 'user_id,fanwork_id', ignoreDuplicates: false })
+          .select();
+
+        if (libraryError) {
+          console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
+          continue;
+        }
+
+        if (libraryData && libraryData.length > 0) {
+          processedCount += libraryData.length;
+        }
+      } else {
+        if (worksData && worksData.length > 0) {
+          processedCount += worksData.length;
+        }
       }
     }
 
