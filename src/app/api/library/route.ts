@@ -22,10 +22,13 @@ export async function GET(request: NextRequest) {
     // For now, we'll use a placeholder - you should get this from your session
     const userId = 'placeholder-user-id'; // Replace with actual user ID from session
 
-    // Fetch works from database
-    const { data: works, error } = await supabase
-      .from('works')
-      .select('*')
+    // Fetch library data from database
+    const { data: libraryEntries, error } = await supabase
+      .from('user_library')
+      .select(`
+        *,
+        fanworks (*)
+      `)
       .eq('user_id', userId)
       .order('date_added', { ascending: false });
 
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      works: works || []
+      library: libraryEntries || []
     });
 
   } catch (error) {

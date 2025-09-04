@@ -88,41 +88,43 @@ const LibraryPage: React.FC = () => {
           const libraryResponse = await fetch('/api/library');
           const libraryData = await libraryResponse.json();
           
-          if (libraryData.works) {
+          if (libraryData.library) {
             // Convert database entries to Fic format
-            const realFics: Fic[] = libraryData.works.map((work: any) => ({
-              id: work.id,
-              title: work.title || 'Unknown Title',
-              author: work.author || 'Unknown Author',
-              author_url: work.author_url || '',
-              fandoms: work.fandoms || [],
-              relationships: work.relationships || [],
-              characters: work.characters || [],
-              words: work.words || 0,
-              chapters_current: work.chapters_current || 1,
-              chapters_total: work.chapters_total || 1,
-              rating: work.rating || 'NR',
-              warnings: work.warnings || [],
-              categories: work.categories || [],
-              kudos: work.kudos || 0,
-              hits: work.hits || 0,
-              bookmarks: work.bookmarks || 0,
-              comments: work.comments || 0,
-              summary: work.summary || 'No summary available',
-              url: work.url || `https://archiveofourown.org/works/${work.id}`,
-              status: work.status || 'to-read',
-              progress: work.progress || 0,
-              user_rating: work.user_rating || 0,
-              user_notes: work.user_notes || '',
-              date_added: work.date_added ? new Date(work.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              date_started: work.date_started ? new Date(work.date_started).toISOString().split('T')[0] : '',
-              date_completed: work.date_completed ? new Date(work.date_completed).toISOString().split('T')[0] : '',
-              source: work.source || 'history',
-              visit_count: work.visit_count || 1,
-              date_visited: work.date_visited ? new Date(work.date_visited).toISOString().split('T')[0] : '',
-              date_bookmarked: work.date_bookmarked ? new Date(work.date_bookmarked).toISOString().split('T')[0] : '',
-              date_marked: work.date_marked ? new Date(work.date_marked).toISOString().split('T')[0] : '',
-              additional_tags: work.additional_tags || []
+            const realFics: Fic[] = libraryData.library.map((entry: any) => ({
+              id: entry.fanwork_id,
+              title: entry.fanworks?.title || 'Unknown Title',
+              author: entry.fanworks?.author || 'Unknown Author',
+              author_url: '',
+              fandoms: [entry.fanworks?.fandom || 'Unknown Fandom'],
+              relationships: [entry.fanworks?.relationship || 'No Relationship'],
+              characters: [],
+              words: entry.fanworks?.word_count || 0,
+              chapters_current: entry.fanworks?.chapters_published || 1,
+              chapters_total: entry.fanworks?.chapters_total || 1,
+              rating: entry.fanworks?.rating || 'NR',
+              warnings: entry.fanworks?.warnings || [],
+              categories: entry.fanworks?.category ? [entry.fanworks.category] : [],
+              kudos: entry.fanworks?.kudos || 0,
+              hits: entry.fanworks?.hits || 0,
+              bookmarks: entry.fanworks?.bookmarks || 0,
+              comments: entry.fanworks?.comments || 0,
+              summary: entry.fanworks?.summary || 'No summary available',
+              url: `https://archiveofourown.org/works/${entry.fanworks?.ao3_work_id || entry.fanwork_id}`,
+              status: entry.reading_status || 'to-read',
+              progress: entry.progress_percentage || 0,
+              user_rating: entry.user_rating || 0,
+              user_notes: entry.private_notes || '',
+              date_added: entry.date_added ? new Date(entry.date_added).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+              date_started: entry.date_started ? new Date(entry.date_started).toISOString().split('T')[0] : '',
+              date_completed: entry.date_completed ? new Date(entry.date_completed).toISOString().split('T')[0] : '',
+              source: entry.private_notes?.includes('bookmarks') ? 'bookmarks' : 
+                     entry.private_notes?.includes('history') ? 'history' : 
+                     entry.private_notes?.includes('marked for later') ? 'marked-for-later' : 'unknown',
+              visit_count: 1,
+              date_visited: entry.last_read ? new Date(entry.last_read).toISOString().split('T')[0] : '',
+              date_bookmarked: entry.private_notes?.includes('bookmarks') ? entry.date_added : '',
+              date_marked: entry.private_notes?.includes('marked for later') ? entry.date_added : '',
+              additional_tags: entry.fanworks?.additional_tags || []
             }));
             
             setFics(realFics);

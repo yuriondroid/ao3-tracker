@@ -98,98 +98,126 @@ export async function POST(request: NextRequest) {
     // Add bookmarks (set status based on source)
     if (importData?.bookmarks) {
       allWorks.push(...importData.bookmarks.map((work: any) => ({
-        id: work.id,
-        user_id: dbUser.id,
+        // Fanwork data
+        id: uuidv4(), // Generate new UUID for fanwork
+        ao3_work_id: work.id,
         title: work.title,
         author: work.author,
-        author_url: work.author_url,
-        url: work.url,
-        fandoms: work.fandoms,
-        rating: work.rating,
-        warnings: work.warnings,
-        categories: work.categories,
-        relationships: work.relationships,
-        characters: work.characters,
-        additional_tags: work.tags,
-        words: work.words,
-        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
+        relationship: work.relationships?.join(', ') || 'No Relationship',
+        additional_tags: work.tags || [],
+        rating: work.rating || 'NR',
+        warnings: work.warnings || ['No Archive Warnings Apply'],
+        category: work.categories?.join(', ') || null,
+        status: 'to-read',
+        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        kudos: work.kudos,
-        hits: work.hits,
-        bookmarks: work.bookmarks,
-        comments: 0,
-        summary: work.summary,
+        word_count: work.words || 0,
+        language: 'English',
         published_date: work.date_bookmarked ? new Date(work.date_bookmarked) : new Date(),
         updated_date: new Date(),
-        status: 'want-to-read', // Bookmarked works are usually "want to read"
+        summary: work.summary || '',
+        kudos: work.kudos || 0,
+        hits: work.hits || 0,
+        bookmarks: work.bookmarks || 0,
+        comments: 0,
+        last_scraped: new Date(),
+        
+        // User library data
+        user_id: dbUser.id,
+        reading_status: 'want-to-read',
+        user_rating: 0,
+        progress_percentage: 0,
+        current_chapter: 1,
         date_added: new Date().toISOString(),
-        source: 'bookmarks'
+        date_started: null,
+        date_completed: null,
+        last_read: null,
+        private_notes: `Imported from bookmarks on ${new Date().toISOString()}`
       })));
     }
 
     // Add history works (set as completed)
     if (importData?.history) {
       allWorks.push(...importData.history.map((work: any) => ({
-        id: work.id,
-        user_id: dbUser.id,
+        // Fanwork data
+        id: uuidv4(), // Generate new UUID for fanwork
+        ao3_work_id: work.id,
         title: work.title,
         author: work.author,
-        author_url: work.author_url,
-        url: work.url,
-        fandoms: work.fandoms,
-        rating: work.rating,
-        warnings: work.warnings,
-        categories: work.categories,
-        relationships: work.relationships,
-        characters: work.characters,
-        additional_tags: work.tags,
-        words: work.words,
-        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
+        relationship: work.relationships?.join(', ') || 'No Relationship',
+        additional_tags: work.tags || [],
+        rating: work.rating || 'NR',
+        warnings: work.warnings || ['No Archive Warnings Apply'],
+        category: work.categories?.join(', ') || null,
+        status: 'to-read',
+        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        kudos: work.kudos,
-        hits: work.hits,
-        bookmarks: work.bookmarks,
-        comments: 0,
-        summary: work.summary,
+        word_count: work.words || 0,
+        language: 'English',
         published_date: work.date_visited ? new Date(work.date_visited) : new Date(),
         updated_date: new Date(),
-        status: 'completed', // History implies they were read
-        date_completed: work.date_visited || new Date().toISOString(),
+        summary: work.summary || '',
+        kudos: work.kudos || 0,
+        hits: work.hits || 0,
+        bookmarks: work.bookmarks || 0,
+        comments: 0,
+        last_scraped: new Date(),
+        
+        // User library data
+        user_id: dbUser.id,
+        reading_status: 'completed',
+        user_rating: 0,
+        progress_percentage: 100,
+        current_chapter: parseInt(work.chapters?.split('/')[1]) || 1,
         date_added: new Date().toISOString(),
-        source: 'history',
-        visit_count: work.visit_count || 1
+        date_started: work.date_visited ? new Date(work.date_visited) : new Date(),
+        date_completed: work.date_visited ? new Date(work.date_visited) : new Date(),
+        last_read: work.date_visited ? new Date(work.date_visited) : new Date(),
+        private_notes: `Imported from history on ${new Date().toISOString()}`
       })));
     }
 
     // Add marked for later works
     if (importData?.markedForLater) {
       allWorks.push(...importData.markedForLater.map((work: any) => ({
-        id: work.id,
-        user_id: dbUser.id,
+        // Fanwork data
+        id: uuidv4(), // Generate new UUID for fanwork
+        ao3_work_id: work.id,
         title: work.title,
         author: work.author,
-        author_url: work.author_url,
-        url: work.url,
-        fandoms: work.fandoms,
-        rating: work.rating,
-        warnings: work.warnings,
-        categories: work.categories,
-        relationships: work.relationships,
-        characters: work.characters,
-        additional_tags: work.tags,
-        words: work.words,
-        chapters_current: parseInt(work.chapters?.split('/')[0]) || 1,
+        fandom: work.fandoms?.join(', ') || 'Unknown Fandom',
+        relationship: work.relationships?.join(', ') || 'No Relationship',
+        additional_tags: work.tags || [],
+        rating: work.rating || 'NR',
+        warnings: work.warnings || ['No Archive Warnings Apply'],
+        category: work.categories?.join(', ') || null,
+        status: 'to-read',
+        chapters_published: parseInt(work.chapters?.split('/')[0]) || 1,
         chapters_total: parseInt(work.chapters?.split('/')[1]) || 1,
-        kudos: work.kudos,
-        hits: work.hits,
-        bookmarks: work.bookmarks,
-        comments: 0,
-        summary: work.summary,
+        word_count: work.words || 0,
+        language: 'English',
         published_date: work.date_marked ? new Date(work.date_marked) : new Date(),
         updated_date: new Date(),
-        status: 'to-read', // Marked for later is "to read"
+        summary: work.summary || '',
+        kudos: work.kudos || 0,
+        hits: work.hits || 0,
+        bookmarks: work.bookmarks || 0,
+        comments: 0,
+        last_scraped: new Date(),
+        
+        // User library data
+        user_id: dbUser.id,
+        reading_status: 'to-read',
+        user_rating: 0,
+        progress_percentage: 0,
+        current_chapter: 1,
         date_added: new Date().toISOString(),
-        source: 'marked-for-later'
+        date_started: null,
+        date_completed: null,
+        last_read: null,
+        private_notes: `Imported from marked for later on ${new Date().toISOString()}`
       })));
     }
 
@@ -227,14 +255,66 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < uniqueWorks.length; i += batchSize) {
       const batch = uniqueWorks.slice(i, i + batchSize);
       
-      const { error: insertError } = await supabase
-        .from('works')
-        .upsert(batch, { onConflict: 'id,user_id' });
+      // Split each work into fanwork and library data
+      const fanworksBatch = batch.map(work => ({
+        id: work.id,
+        ao3_work_id: work.ao3_work_id,
+        title: work.title,
+        author: work.author,
+        fandom: work.fandom,
+        relationship: work.relationship,
+        additional_tags: work.additional_tags,
+        rating: work.rating,
+        warnings: work.warnings,
+        category: work.category,
+        status: work.status,
+        chapters_published: work.chapters_published,
+        chapters_total: work.chapters_total,
+        word_count: work.word_count,
+        language: work.language,
+        published_date: work.published_date,
+        updated_date: work.updated_date,
+        summary: work.summary,
+        kudos: work.kudos,
+        hits: work.hits,
+        bookmarks: work.bookmarks,
+        comments: work.comments,
+        last_scraped: work.last_scraped
+      }));
 
-      if (insertError) {
-        console.error(`Onboarding API: Failed to insert batch ${i / batchSize + 1}:`, insertError);
-        // Continue with other batches even if one fails
-      } else {
+      const libraryBatch = batch.map(work => ({
+        user_id: work.user_id,
+        fanwork_id: work.id,
+        reading_status: work.reading_status,
+        user_rating: work.user_rating,
+        progress_percentage: work.progress_percentage,
+        current_chapter: work.current_chapter,
+        date_added: work.date_added,
+        date_started: work.date_started,
+        date_completed: work.date_completed,
+        last_read: work.last_read,
+        private_notes: work.private_notes
+      }));
+
+      // Insert fanworks
+      const { error: fanworksError } = await supabase
+        .from('fanworks')
+        .upsert(fanworksBatch, { onConflict: 'ao3_work_id' });
+
+      if (fanworksError) {
+        console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
+      }
+
+      // Insert library entries
+      const { error: libraryError } = await supabase
+        .from('user_library')
+        .upsert(libraryBatch, { onConflict: 'user_id,fanwork_id' });
+
+      if (libraryError) {
+        console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
+      }
+
+      if (!fanworksError && !libraryError) {
         processedCount += batch.length;
       }
     }

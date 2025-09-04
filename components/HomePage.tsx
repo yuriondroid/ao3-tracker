@@ -73,21 +73,37 @@ const HomePage: React.FC = () => {
           const libraryResponse = await fetch('/api/library');
           const libraryData = await libraryResponse.json();
           
-          if (libraryData.success && libraryData.works) {
-            setWorks(libraryData.works);
+          if (libraryData.success && libraryData.library) {
+            // Convert library entries to Work format
+            const convertedWorks: Work[] = libraryData.library.map((entry: any) => ({
+              id: entry.fanwork_id,
+              title: entry.fanworks?.title || 'Unknown Title',
+              author: entry.fanworks?.author || 'Unknown Author',
+              words: entry.fanworks?.word_count || 0,
+              status: entry.reading_status || 'to-read',
+              source: entry.private_notes?.includes('bookmarks') ? 'bookmarks' : 
+                     entry.private_notes?.includes('history') ? 'history' : 
+                     entry.private_notes?.includes('marked for later') ? 'marked-for-later' : 'unknown',
+              date_added: entry.date_added,
+              kudos: entry.fanworks?.kudos || 0,
+              hits: entry.fanworks?.hits || 0,
+              bookmarks: entry.fanworks?.bookmarks || 0
+            }));
+            
+            setWorks(convertedWorks);
             
             // Calculate stats
             const calculatedStats: Stats = {
-              totalWorks: libraryData.works.length,
-              totalWords: libraryData.works.reduce((sum: number, work: Work) => sum + (work.words || 0), 0),
-              currentlyReading: libraryData.works.filter((work: Work) => work.status === 'reading').length,
-              completed: libraryData.works.filter((work: Work) => work.status === 'completed').length,
-              wantToRead: libraryData.works.filter((work: Work) => work.status === 'want-to-read').length,
-              bookmarks: libraryData.works.filter((work: Work) => work.source === 'bookmarks').length,
-              markedForLater: libraryData.works.filter((work: Work) => work.source === 'marked-for-later').length,
-              totalKudos: libraryData.works.reduce((sum: number, work: Work) => sum + (work.kudos || 0), 0),
-              totalHits: libraryData.works.reduce((sum: number, work: Work) => sum + (work.hits || 0), 0),
-              totalBookmarks: libraryData.works.reduce((sum: number, work: Work) => sum + (work.bookmarks || 0), 0)
+              totalWorks: convertedWorks.length,
+              totalWords: convertedWorks.reduce((sum: number, work: Work) => sum + (work.words || 0), 0),
+              currentlyReading: convertedWorks.filter((work: Work) => work.status === 'reading').length,
+              completed: convertedWorks.filter((work: Work) => work.status === 'completed').length,
+              wantToRead: convertedWorks.filter((work: Work) => work.status === 'want-to-read').length,
+              bookmarks: convertedWorks.filter((work: Work) => work.source === 'bookmarks').length,
+              markedForLater: convertedWorks.filter((work: Work) => work.source === 'marked-for-later').length,
+              totalKudos: convertedWorks.reduce((sum: number, work: Work) => sum + (work.kudos || 0), 0),
+              totalHits: convertedWorks.reduce((sum: number, work: Work) => sum + (work.hits || 0), 0),
+              totalBookmarks: convertedWorks.reduce((sum: number, work: Work) => sum + (work.bookmarks || 0), 0)
             };
             
             setStats(calculatedStats);
