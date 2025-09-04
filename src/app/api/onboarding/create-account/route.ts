@@ -307,20 +307,22 @@ export async function POST(request: NextRequest) {
 
       console.log('Onboarding API: Library batch sample:', libraryBatch[0]);
 
-      // Insert fanworks first
+      // Insert fanworks first - use insert instead of upsert to avoid conflicts
       const { error: fanworksError } = await supabase
         .from('fanworks')
-        .upsert(fanworksBatch, { onConflict: 'ao3_work_id' });
+        .insert(fanworksBatch)
+        .select();
 
       if (fanworksError) {
-        console.error(`Onboarding API: Failed to insert fanworks batch ${i / batchSize + 1}:`, fanworksError);
-        continue; // Skip this batch if fanworks fail
+        // If fanworks already exist, that's fine - continue to library
+        console.log(`Onboarding API: Fanworks batch ${i / batchSize + 1} already exists or error:`, fanworksError.message);
       }
 
-      // Insert library entries after fanworks are confirmed
+      // Insert library entries - use insert instead of upsert
       const { error: libraryError } = await supabase
         .from('user_library')
-        .upsert(libraryBatch, { onConflict: 'user_id,fanwork_id' });
+        .insert(libraryBatch)
+        .select();
 
       if (libraryError) {
         console.error(`Onboarding API: Failed to insert library batch ${i / batchSize + 1}:`, libraryError);
