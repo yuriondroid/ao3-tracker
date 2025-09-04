@@ -107,15 +107,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       const chaptersEl = workContainer.querySelector('.chapters');
       const chapters = chaptersEl?.textContent?.trim() || '1/1';
       
-      const kudosEl = workContainer.querySelector('.kudos a');
-      const kudos = parseInt(kudosEl?.textContent?.replace(/,/g, '') || '0') || 0;
-      
-      const hitsEl = workContainer.querySelector('.hits');
-      const hits = parseInt(hitsEl?.textContent?.replace(/,/g, '') || '0') || 0;
-      
-      const bookmarksEl = workContainer.querySelector('.bookmarks a');
-      const bookmarks = parseInt(bookmarksEl?.textContent?.replace(/,/g, '') || '0') || 0;
-      
       // Get summary
       const summaryEl = workContainer.querySelector('.summary blockquote');
       const summary = summaryEl?.textContent?.trim() || '';
@@ -139,9 +130,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         tags: tags,
         words: words,
         chapters: chapters,
-        kudos: kudos,
-        hits: hits,
-        bookmarks: bookmarks,
         summary: summary,
         date_bookmarked: dateBookmarked,
         source: 'bookmarks',
@@ -211,9 +199,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           tags: tags,
           words: parseInt(work.words) || 0,
           chapters: work.chapters || work.completion || '1/1',
-          kudos: parseInt(work.kudos) || 0,
-          hits: parseInt(work.hits) || 0,
-          bookmarks: parseInt(work.bookmarks) || 0,
           summary: work.summary || '',
           date_visited: work.date_visited || work.visited || work.last_read || '',
           visit_count: work.visit_count || work.visits || 1,
@@ -285,9 +270,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           tags: tags,
           words: parseInt(work.words) || 0,
           chapters: work.chapters || work.completion || '1/1',
-          kudos: parseInt(work.kudos) || 0,
-          hits: parseInt(work.hits) || 0,
-          bookmarks: parseInt(work.bookmarks) || 0,
           summary: work.summary || '',
           date_marked: work.date_marked || work.marked || '',
           source: 'marked-for-later',
